@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mlb_pred — 次の球種を、投げる前に当てる</title>
+<meta name="description" content="投球前の状況だけから次の球種(8種)を予測するAI。全体46%(ランダムの約3.5倍)。でもカウントで当てやすさは激変する——3-0なら78%、0-2なら44%。実測データで見るデモ。">
+<style>
+  :root{
+    --bg:#f4f1e8; --paper:#faf8f1; --ink:#332f28; --muted:#7c7669; --faint:#a89f8d;
+    --line:#e3ddce; --indigo:#566b78; --moss:#6c7358; --amber:#b98a3e; --rose:#9a6a5f;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.95;font-size:16px;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+  a{color:inherit}
+  .wrap{max-width:760px;margin:0 auto;padding:0 26px}
+  .top{padding:26px 0 0}
+  .back{font-size:13px;color:var(--muted);letter-spacing:.12em}
+  .back:hover{color:var(--ink)}
+  header{padding:34px 0 4px}
+  .label{font-size:12px;letter-spacing:.3em;color:var(--indigo);margin-bottom:14px}
+  h1{font-family:var(--serif);font-weight:500;font-size:clamp(26px,5vw,36px);letter-spacing:.05em;margin:0 0 18px;line-height:1.6}
+  .intro{color:#4c473e;max-width:640px;margin:0}
+  .intro .en{display:block;color:var(--faint);font-size:13px;letter-spacing:.02em;margin-top:8px}
+
+  .stats{display:flex;flex-wrap:wrap;gap:14px;margin:26px 0 0}
+  .stat{background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:12px 18px;min-width:120px}
+  .stat .v{font-family:var(--serif);font-size:24px;line-height:1.1}
+  .stat .l{font-size:11.5px;color:var(--muted);letter-spacing:.04em;margin-top:2px}
+
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:22px 0 0}
+  .chip{font-size:11.5px;color:#5a554c;background:var(--paper);border:1px solid var(--line);border-radius:2px;padding:4px 9px;letter-spacing:.02em}
+  .chip b{font-weight:500;font-family:var(--serif);color:var(--indigo);margin-right:4px}
+
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:26px 24px;margin:36px 0}
+  .ptitle{font-family:var(--serif);font-size:18px;letter-spacing:.04em;margin:0 0 4px}
+  .psub{font-size:12.5px;color:var(--muted);margin:0 0 20px}
+
+  .counts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:560px){.counts{grid-template-columns:repeat(2,1fr)}}
+  .cbtn{border:1px solid var(--line);background:var(--bg);border-radius:3px;padding:14px 8px;text-align:center;cursor:pointer;transition:.15s}
+  .cbtn:hover{border-color:var(--indigo)}
+  .cbtn.on{border-color:var(--ink);background:#fff;box-shadow:inset 0 -2px 0 var(--indigo)}
+  .cbtn .cc{font-family:var(--serif);font-size:22px;letter-spacing:.06em}
+  .cbtn .ct{font-size:10.5px;color:var(--muted);letter-spacing:.03em;margin-top:4px;line-height:1.4}
+
+  .detail{margin-top:24px;border-top:1px solid var(--line);padding-top:22px;display:grid;grid-template-columns:150px 1fr;gap:24px;align-items:start}
+  @media(max-width:560px){.detail{grid-template-columns:1fr;gap:14px}}
+  .accbox .big{font-family:var(--serif);font-size:46px;line-height:1;color:var(--ink)}
+  .accbox .lbl{font-size:12px;color:var(--muted);letter-spacing:.04em;margin-top:4px}
+  .accbox .n{font-size:11.5px;color:var(--faint);margin-top:8px}
+  .meter{height:10px;background:#ece5d5;border-radius:6px;position:relative;margin:14px 0 6px;overflow:visible}
+  .meter .fill{height:100%;background:var(--indigo);opacity:.55;border-radius:6px;transition:width .4s}
+  .meter .base{position:absolute;top:-5px;bottom:-5px;width:2px;background:var(--rose)}
+  .meter .baselab{position:absolute;top:14px;font-size:10.5px;color:var(--rose);transform:translateX(-50%);white-space:nowrap}
+  .dwhy{color:#413d34;font-size:14.5px;line-height:1.9}
+  .dwhy .tag{display:inline-block;font-family:var(--serif);font-size:12.5px;color:var(--indigo);border:1px solid var(--line);border-radius:2px;padding:3px 10px;margin-bottom:12px}
+  .dwhy .fb{color:var(--muted);font-size:13px;margin-top:10px}
+
+  /* model stack */
+  .bars{display:flex;align-items:flex-end;gap:16px;height:180px;margin-top:8px;padding-top:10px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .bar .col{width:100%;max-width:60px;background:#d9d2c2;border-radius:3px 3px 0 0;position:relative;transition:height .5s}
+  .bar.ens .col{background:var(--indigo);opacity:.7}
+  .bar .val{font-family:var(--serif);font-size:14px;margin-bottom:6px;color:#3f3b33}
+  .bar .nm{font-size:11.5px;color:var(--muted);margin-top:8px;text-align:center;line-height:1.4}
+  .barnote{font-size:12.5px;color:var(--muted);margin-top:16px}
+
+  section.prose h2{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:.06em;margin:44px 0 12px}
+  section.prose p{color:#4c473e;font-size:15px;max-width:660px}
+  .note{color:var(--faint);font-size:12.5px;line-height:1.85;border-top:1px solid var(--line);margin-top:40px;padding-top:22px;max-width:660px}
+  footer{text-align:center;padding:54px 0 70px;color:var(--faint);font-size:12.5px;letter-spacing:.14em}
+  footer a{color:var(--muted)}
+  footer .mark{font-family:var(--serif);font-size:18px;letter-spacing:.1em;color:var(--ink);display:block;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<div class="wrap top"><a class="back" href="../../">← ずっきーLab</a></div>
+
+<div class="wrap">
+  <header>
+    <div class="label">mlb_pred</div>
+    <h1>次の球種を、投げる前に当てる。</h1>
+    <p class="intro">
+      投球前の状況——カウント、走者、それまでの配球、投手の癖——<b>だけ</b>から、次の一球が8種類のどれかを予測するAI。球速や変化(投げた後にしか分からない情報)は、あえて使いません。全体で <b>46%</b>(でたらめに当てる12.5%の約3.5倍)。でも、<b>状況によって当てやすさは大きく変わります</b>。カウントを選んでみてください。
+      <span class="en">Predicting one of 8 pitch types from pre-pitch context only. 46% overall (~3.5× the 12.5% baseline) — but it depends hugely on the count.</span>
+    </p>
+    <div class="stats">
+      <div class="stat"><div class="v">8種</div><div class="l">予測する球種</div></div>
+      <div class="stat"><div class="v">46.0%</div><div class="l">全体正解率(同年)</div></div>
+      <div class="stat"><div class="v">×3.5</div><div class="l">でたらめ(12.5%)比</div></div>
+      <div class="stat"><div class="v">投球前のみ</div><div class="l">使う情報</div></div>
+    </div>
+    <div class="chips">
+      <span class="chip"><b>FF</b>フォーシーム</span><span class="chip"><b>SI</b>シンカー</span><span class="chip"><b>SL</b>スライダー</span><span class="chip"><b>CH</b>チェンジ</span><span class="chip"><b>CU</b>カーブ</span><span class="chip"><b>FC</b>カッター</span><span class="chip"><b>FS</b>スプリット</span><span class="chip"><b>ST</b>スイーパー</span>
+    </div>
+  </header>
+
+  <div class="panel">
+    <div class="ptitle">カウントで、当てやすさはこんなに変わる</div>
+    <div class="psub">カウントを選ぶと、そのときの実測正解率と理由が出ます（クロスイヤー評価・2024年）</div>
+    <div class="counts" id="counts"></div>
+    <div class="detail">
+      <div class="accbox">
+        <div class="big" id="acc">—</div>
+        <div class="lbl">このカウントの正解率</div>
+        <div class="n" id="nn"></div>
+      </div>
+      <div>
+        <div class="dwhy">
+          <span class="tag" id="tag"></span>
+          <div id="why"></div>
+          <div class="fb" id="fb"></div>
+        </div>
+        <div class="meter"><div class="fill" id="fill"></div><div class="base" style="left:12.5%"></div><div class="baselab" style="left:12.5%">でたらめ 12.5%</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="ptitle">弱いモデルを3つ重ねると、跳ねる</div>
+    <div class="psub">単体では37〜39%どまり。異なる3つを重ねて（スタッキング）46%へ（同年評価）</div>
+    <div class="bars" id="bars"></div>
+    <div class="barnote">XGBoost・CatBoost・TFT(Temporal Fusion Transformer)——見ている癖が違う3つを、もう一段のモデルで束ねると、単体を大きく超える。</div>
+  </div>
+
+  <section class="prose">
+    <h2>なぜ「投げる前だけ」で当てられるのか</h2>
+    <p>
+      配球には癖があります。打者が有利なカウント(3ボール0ストライクなど)では、投手は四球を避けるためストレートを置きにいく——だから <b>読みやすい</b>。逆に投手が有利なカウント(0ボール2ストライク)では、空振りを取りに変化球で大胆に外せる——<b>選択肢が最大＝最も読みにくい</b>。モデルは、カウント・走者・直前の配球・投手ごとの傾向から、こうしたパターンを学びます。
+    </p>
+    <h2>あえて、難しいほうを解く</h2>
+    <p>
+      球速や変化量を入れれば正解率は簡単に上がりますが、それは「投げ終わった後」の情報。<b>投球前だけ</b>という縛りは、実戦で本当に役立つ予測(バッテリーの読み合い)に対応します。だから 46% は、8択・投球前限定という厳しい条件での 46% です。単体で頭打ちの弱学習器を、性質の違うまま束ねる(XGBoost＋CatBoost＋TFTのスタッキング)ことで、そこを押し上げました。
+    </p>
+    <p class="note">
+      数値はすべて mlb_pred の実測。カウント別・モデル別はクロスイヤー/同年評価より（Train 2023 → Test 2024 ほか、Statcast データ）。3-0でのストレート約96%はリーグ全体の傾向値(2019, Baseball Savant)。球種8種：FF/SI/SL/CH/CU/FC/FS/ST。
+    </p>
+  </section>
+</div>
+
+<footer>
+  <span class="mark">ずっきーLab</span>
+  <a href="../../">ずっきーLab へ戻る</a> ・ <a href="https://github.com/ytszkyuta-max" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script>
+(function(){
+  var COUNTS=[
+    {k:'3-0', t:'打者が絶対有利', acc:77.98, n:3483, tag:'打者が絶対有利', fb:'このカウント、リーグ全体でもストレート約96%(2019)。',
+     why:'四球を避けるため、投手はほぼストレートを置きにいく。誰にでも読める＝モデルも一番当てやすい。'},
+    {k:'0-0', t:'初球・まっさら', acc:43.17, n:93477, tag:'配球の入り',
+     why:'球種の選択肢が広く、投手の個性が出る場面。実は4つの中で一番読みにくい。', fb:'サンプルは最多(9.3万球)。'},
+    {k:'3-2', t:'フルカウント', acc:48.40, n:18444, tag:'一球で決着',
+     why:'歩かせるか勝負か、次の一球で決まる。ストライクを取りにいく力学が働き、やや読みやすくなる。', fb:''},
+    {k:'0-2', t:'投手が絶対有利', acc:44.39, n:24789, tag:'投手が絶対有利',
+     why:'空振りを取りに、変化球でボールゾーンへ大胆に外せる。選択肢が最大＝最も自由＝読みにくい。', fb:'「有利なのに当てにくい」のが面白いところ。'}
+  ];
+  var cont=document.getElementById('counts');
+  COUNTS.forEach(function(c,i){
+    var b=document.createElement('div');b.className='cbtn';b.dataset.i=i;
+    b.innerHTML='<div class="cc">'+c.k+'</div><div class="ct">'+c.t+'</div>';
+    b.onclick=function(){select(i);};cont.appendChild(b);
+  });
+  function select(i){
+    var c=COUNTS[i];
+    document.querySelectorAll('.cbtn').forEach(function(b){b.classList.toggle('on',+b.dataset.i===i);});
+    document.getElementById('acc').textContent=c.acc.toFixed(1)+'%';
+    document.getElementById('nn').textContent='サンプル '+c.n.toLocaleString()+' 球';
+    document.getElementById('tag').textContent=c.tag;
+    document.getElementById('why').textContent=c.why;
+    document.getElementById('fb').textContent=c.fb||'';
+    document.getElementById('fill').style.width=c.acc+'%';
+  }
+
+  // モデルスタック(同年)
+  var MODELS=[{n:'XGBoost',v:37.84},{n:'CatBoost',v:36.84},{n:'TFT',v:38.67},{n:'アンサンブル',v:46.02,ens:true}];
+  var bc=document.getElementById('bars');var MX=50;
+  MODELS.forEach(function(m){
+    var d=document.createElement('div');d.className='bar'+(m.ens?' ens':'');
+    d.innerHTML='<div class="val">'+m.v.toFixed(1)+'%</div><div class="col" style="height:'+(m.v/MX*100)+'%"></div><div class="nm">'+m.n+'</div>';
+    bc.appendChild(d);
+  });
+
+  select(0);
+})();
+</script>
+</body>
+</html>

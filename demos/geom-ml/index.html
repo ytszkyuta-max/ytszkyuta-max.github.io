@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>geom-ml — どんな形でも、丸みの合計は720°（ガウス・ボネ）</title>
+<meta name="description" content="正四面体も立方体も正二十面体も——かどの数も隙間の角度もバラバラなのに、"かどの隙間"を全部足すと必ず720°=4π。形を切り替えて確かめるガウス・ボネの定理。">
+<style>
+  :root{
+    --bg:#f4f1e8; --paper:#faf8f1; --ink:#332f28; --muted:#7c7669; --faint:#a89f8d;
+    --line:#e3ddce; --indigo:#566b78; --moss:#6c7358; --amber:#b98a3e;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.95;font-size:16px;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+  a{color:inherit}
+  .wrap{max-width:760px;margin:0 auto;padding:0 26px}
+  .top{padding:26px 0 0}
+  .back{font-size:13px;color:var(--muted);letter-spacing:.12em}
+  .back:hover{color:var(--ink)}
+  header{padding:34px 0 4px}
+  .label{font-size:12px;letter-spacing:.3em;color:var(--indigo);margin-bottom:14px}
+  h1{font-family:var(--serif);font-weight:500;font-size:clamp(26px,5vw,36px);letter-spacing:.05em;margin:0 0 18px;line-height:1.6}
+  .intro{color:#4c473e;max-width:640px;margin:0}
+  .intro .en{display:block;color:var(--faint);font-size:13px;letter-spacing:.02em;margin-top:8px}
+
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:24px 24px;margin:36px 0}
+  .tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px}
+  .tabs button{font:inherit;font-size:13px;color:var(--muted);background:var(--bg);border:1px solid var(--line);
+    border-radius:2px;padding:7px 13px;cursor:pointer;letter-spacing:.03em;font-family:var(--serif)}
+  .tabs button:hover{border-color:var(--indigo)}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .sinfo{font-size:12.5px;color:#5a554c;letter-spacing:.02em;margin:12px 0 18px;min-height:1.4em}
+  .sinfo b{font-weight:500;font-family:var(--serif);color:var(--indigo)}
+
+  .stage{display:grid;grid-template-columns:1fr 244px;gap:26px;align-items:center}
+  @media(max-width:640px){.stage{grid-template-columns:1fr}}
+  canvas#ico{width:100%;height:auto;display:block;cursor:grab;touch-action:none}
+  canvas#ico:active{cursor:grabbing}
+  .cap{font-size:11.5px;color:var(--faint);letter-spacing:.08em;text-align:center;margin-top:8px}
+
+  .readout .big{font-family:var(--serif);font-size:38px;line-height:1;color:var(--ink)}
+  .readout .big small{font-size:13.5px;color:var(--muted);margin-left:8px;font-family:var(--sans)}
+  .readout .sub{color:var(--muted);font-size:12.5px;letter-spacing:.04em;margin-top:6px}
+  .prog{height:6px;background:#ece5d5;border-radius:6px;overflow:hidden;margin:16px 0 4px}
+  .prog .bar{height:100%;background:var(--indigo);opacity:.6;width:0;transition:width .3s}
+  .target{font-family:var(--serif);font-size:14px;color:var(--indigo);margin-top:12px}
+  .target.done{color:var(--moss)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+  .btns button{font:inherit;font-size:12.5px;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+    border-radius:2px;padding:8px 13px;cursor:pointer;letter-spacing:.04em}
+  .btns button:hover{border-color:var(--indigo)}
+  .btns button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btns button.primary:hover{background:var(--indigo);border-color:var(--indigo)}
+
+  .punch{text-align:center;font-family:var(--serif);font-size:15px;color:#2f2b24;letter-spacing:.04em;
+    border-top:1px solid var(--line);margin-top:22px;padding-top:20px}
+  .punch b{color:var(--indigo)}
+
+  .inset{display:flex;gap:24px;align-items:center;margin-top:20px;flex-wrap:wrap}
+  .inset svg{flex:none}
+  .inset p{margin:0;color:#4c473e;font-size:13.5px;line-height:1.9;max-width:420px}
+  .inset p b{font-weight:500;font-family:var(--serif)}
+
+  section.prose h2{font-family:var(--serif);font-weight:500;font-size:21px;letter-spacing:.06em;margin:44px 0 12px}
+  section.prose p{color:#4c473e;font-size:15px;max-width:660px}
+  table.cmp{border-collapse:collapse;margin:14px 0 4px;font-size:13.5px}
+  table.cmp th,table.cmp td{border-bottom:1px solid var(--line);padding:8px 16px 8px 0;text-align:left;color:#4c473e}
+  table.cmp th{color:var(--muted);font-weight:400;letter-spacing:.06em;font-size:12px}
+  table.cmp td.tot{font-family:var(--serif);color:var(--indigo)}
+  .note{color:var(--faint);font-size:12.5px;line-height:1.85;border-top:1px solid var(--line);margin-top:40px;padding-top:22px;max-width:660px}
+  footer{text-align:center;padding:54px 0 70px;color:var(--faint);font-size:12.5px;letter-spacing:.14em}
+  footer a{color:var(--muted)}
+  footer .mark{font-family:var(--serif);font-size:18px;letter-spacing:.1em;color:var(--ink);display:block;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<div class="wrap top"><a class="back" href="../../">← ずっきーLab</a></div>
+
+<div class="wrap">
+  <header>
+    <div class="label">geom-ml</div>
+    <h1>どんな形でも、丸みの合計は<br>いつも 720°。</h1>
+    <p class="intro">
+      平らな紙では、一点のまわりに角がぐるりと <b>360°</b> 集まります。でも立体の“かど”では、少し足りない。その<b>足りない隙間</b>が、そこの“丸み”。おもしろいのはここから——<b>かどの数も、隙間の角度も、形によってバラバラ</b>なのに、全部足すと<b>いつも 720°</b>。形を切り替えて、確かめてみてください。
+      <span class="en">Corners fall short of 360°; that gap is the “roundness.” The number of corners and the size of each gap change with the shape — but the total is always 720°.</span>
+    </p>
+  </header>
+
+  <div class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div class="sinfo" id="sinfo"></div>
+
+    <div class="stage">
+      <div>
+        <canvas id="ico" width="720" height="560"></canvas>
+        <div class="cap">ドラッグで回転 ・ 調べたかどが藍色に灯る</div>
+      </div>
+      <div class="readout">
+        <div class="big" id="deg">0°<small id="cnt">0 かど</small></div>
+        <div class="sub" id="degsub">足りない角の合計</div>
+        <div class="prog"><div class="bar" id="bar"></div></div>
+        <div class="target" id="target">目標 720° = 4π</div>
+        <div class="btns">
+          <button class="primary" id="step">次のかどを調べる</button>
+          <button id="all">全部</button>
+          <button id="reset">リセット</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="punch">かどの数も、隙間の角度も、形でバラバラ。なのに合計は <b>いつも 720°</b>。</div>
+
+    <div class="inset">
+      <svg id="fan" width="150" height="150" viewBox="0 0 150 150" aria-hidden="true"></svg>
+      <p id="fantxt"></p>
+    </div>
+  </div>
+
+  <section class="prose">
+    <h2>これがガウス・ボネの定理</h2>
+    <p>
+      “丸み”（数学では「曲率」）を立体ぜんぶで足し合わせると、途中のデコボコによらず、閉じた形ごとに決まった値になります。ボールのように穴のない形なら、いつも 4π = 720°。<b>局所はいくらでも自由なのに、全体は決して動かない</b>——だから 720° は「特定の形」ではなく「まるいこと」そのものの数です。ドーナツ形(穴が1つ)なら合計は 0°、というふうに、値は形の“つながり方”だけで決まります。
+    </p>
+    <table class="cmp">
+      <tr><th>形</th><th>かどの数</th><th>1かどの隙間</th><th>合計</th></tr>
+      <tr><td>正四面体</td><td>4</td><td>180°</td><td class="tot">720°</td></tr>
+      <tr><td>正八面体</td><td>6</td><td>120°</td><td class="tot">720°</td></tr>
+      <tr><td>立方体</td><td>8</td><td>90°</td><td class="tot">720°</td></tr>
+      <tr><td>正二十面体</td><td>12</td><td>60°</td><td class="tot">720°</td></tr>
+      <tr><td>正十二面体</td><td>20</td><td>36°</td><td class="tot">720°</td></tr>
+    </table>
+    <h2>そして、これを機械学習に</h2>
+    <p>
+      ふつうのニューラルネット（画像のCNN）は、<b>平らな画像</b>が得意です。でも世の中には、平らにできないデータがたくさんある——たとえば地球全体の気象データは、<b>球面の上</b>に乗っています。世界地図が必ずどこかで歪むように、球はきれいに平らへは開けません。だから画像用のネットをそのまま貼ると、北極や南極のあたりが大きく歪んでしまう。
+    </p>
+    <p>
+      球の上で「畳み込み」（CNNの中心の計算）をするには、ある点から隣の点へ特徴を<b>運ぶ</b>必要があります。ところが曲がった面では、「どちらが北か（向きの基準）」が場所ごとに少しずつズレていく。この“運び方”を決める規則が<b>接続</b>で、ぐるり一周して戻ったときに残るズレが、まさにこのデモで見た<b>“丸み”</b>です。丸みがある＝素直に運べない、ということ。
+    </p>
+    <p>
+      geom-ml がやったのは、この幾何を<b>ネットワークの設計そのものに組み込む</b>こと。各点で「北」をどちら向きに取っても答えが変わらないように作れば（＝<b>ゲージ同変</b>）、モデルは“座標の取り方”という本質でない自由に振り回されず、<b>球という形を土台にして</b>学べます。実際に、二十面体メッシュ（球を三角形で覆ったもの）の上に、地球の気温・気圧を扱うネットワークを組みました。この“丸み”が、そのまま畳み込みの動き方に効いている——それが、このデモと地続きの応用です。
+    </p>
+    <p class="note">
+      “かどの隙間”は数学ではデカルトの定理／角欠損と呼ばれ、どの凸多面体でも合計は必ず 720° = 4π（オイラーの多面体定理 V−E+F=2 と等価）。面のまわりを一周して測る「曲率（ホロノミー）」で見ても、たとえば正二十面体は各面 36°×20面で同じ 720° になります。
+    </p>
+  </section>
+</div>
+
+<footer>
+  <span class="mark">ずっきーLab</span>
+  <a href="../../">ずっきーLab へ戻る</a> ・ <a href="https://github.com/ytszkyuta-max" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script>
+(function(){
+  var PHI=(1+Math.sqrt(5))/2, iv=1/PHI;
+  function cube(){var a=[];[-1,1].forEach(function(x){[-1,1].forEach(function(y){[-1,1].forEach(function(z){a.push([x,y,z]);});});});return a;}
+  function dodeca(){
+    var a=cube();
+    [[0,iv,PHI],[0,iv,-PHI],[0,-iv,PHI],[0,-iv,-PHI],
+     [iv,PHI,0],[iv,-PHI,0],[-iv,PHI,0],[-iv,-PHI,0],
+     [PHI,0,iv],[PHI,0,-iv],[-PHI,0,iv],[-PHI,0,-iv]].forEach(function(p){a.push(p);});
+    return a;
+  }
+  var ICO=[[0,1,PHI],[0,1,-PHI],[0,-1,PHI],[0,-1,-PHI],[1,PHI,0],[1,-PHI,0],[-1,PHI,0],[-1,-PHI,0],[PHI,0,1],[PHI,0,-1],[-PHI,0,1],[-PHI,0,-1]];
+
+  // 形の定義（かどの周り: n枚の多角形、内角 fa°）
+  var SOLIDS=[
+    {key:'tetra', name:'正四面体', v:[[1,1,1],[1,-1,-1],[-1,1,-1],[-1,-1,1]], n:3, fa:60,  poly:'三角形'},
+    {key:'octa',  name:'正八面体', v:[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]], n:4, fa:60, poly:'三角形'},
+    {key:'cube',  name:'立方体',   v:cube(), n:3, fa:90, poly:'正方形'},
+    {key:'icosa', name:'正二十面体', v:ICO, n:5, fa:60, poly:'三角形'},
+    {key:'dodeca',name:'正十二面体', v:dodeca(), n:3, fa:108, poly:'五角形'}
+  ];
+  function prep(s){
+    var r=Math.hypot(s.v[0][0],s.v[0][1],s.v[0][2]);
+    s.V=s.v.map(function(p){return [p[0]/r,p[1]/r,p[2]/r];});
+    // 最近接距離で辺
+    var min=1e9;
+    for(var i=0;i<s.V.length;i++)for(var j=i+1;j<s.V.length;j++){var dx=s.V[i][0]-s.V[j][0],dy=s.V[i][1]-s.V[j][1],dz=s.V[i][2]-s.V[j][2];var d=dx*dx+dy*dy+dz*dz;if(d<min)min=d;}
+    var th=min*1.30;s.E=[];
+    for(var i2=0;i2<s.V.length;i2++)for(var j2=i2+1;j2<s.V.length;j2++){var dx=s.V[i2][0]-s.V[j2][0],dy=s.V[i2][1]-s.V[j2][1],dz=s.V[i2][2]-s.V[j2][2];if(dx*dx+dy*dy+dz*dz<th)s.E.push([i2,j2]);}
+    s.order=s.V.map(function(_,k){return k;}).sort(function(p,q){return s.V[q][1]-s.V[p][1];});
+    s.defect=360-s.n*s.fa;
+  }
+  SOLIDS.forEach(prep);
+
+  var cur=SOLIDS[3]; // 初期: 正二十面体
+  var cv=document.getElementById('ico'),ctx=cv.getContext('2d');
+  var W=cv.width,H=cv.height,CX=W/2,CY=H/2,DEP=4.2,RAD=Math.min(W,H)*0.42;
+  var ax=-0.32,ay=0.4,autov=0.005,drag=false,px=0,py=0;
+  var mv=[],flash=-1,flashT=0,step=0;
+
+  function rot(p){
+    var cyv=Math.cos(ay),syv=Math.sin(ay),cxv=Math.cos(ax),sxv=Math.sin(ax);
+    var x=p[0]*cyv+p[2]*syv, z=-p[0]*syv+p[2]*cyv, y=p[1];
+    return [x, y*cxv-z*sxv, y*sxv+z*cxv];
+  }
+  function project(p){var pe=DEP/(DEP-p[2]);return [CX+p[0]*RAD*pe, CY-p[1]*RAD*pe];}
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    var rv=cur.V.map(rot);
+    // 辺(奥は淡く)
+    cur.E.forEach(function(e){
+      var A=rv[e[0]],B=rv[e[1]],pa=project(A),pb=project(B);
+      var zz=(A[2]+B[2])/2, al=0.28+(zz+1)/2*0.5;
+      ctx.beginPath();ctx.moveTo(pa[0],pa[1]);ctx.lineTo(pb[0],pb[1]);
+      ctx.lineWidth=0.8+ (zz>0?0.7:0); ctx.strokeStyle='rgba(74,70,61,'+al.toFixed(2)+')';ctx.stroke();
+    });
+    // かど
+    for(var v=0;v<rv.length;v++){
+      var pr=project(rv[v]);
+      var r=v===flash?7:(mv[v]?5:3.2);
+      ctx.beginPath();ctx.arc(pr[0],pr[1],r,0,7);
+      ctx.fillStyle=v===flash?'#b98a3e':(mv[v]?'#566b78':'rgba(120,113,101,0.5)');ctx.fill();
+      if(v===flash){ctx.beginPath();ctx.arc(pr[0],pr[1],12,0,7);ctx.strokeStyle='rgba(185,138,62,0.6)';ctx.lineWidth=1.4;ctx.stroke();}
+    }
+  }
+
+  var degEl=document.getElementById('deg'),cntEl=document.getElementById('cnt'),
+      barEl=document.getElementById('bar'),tgtEl=document.getElementById('target'),
+      subEl=document.getElementById('degsub');
+  function update(){
+    var k=mv.filter(Boolean).length, tot=k*cur.defect;
+    degEl.childNodes[0].nodeValue=tot+'°';
+    cntEl.textContent=k+' / '+cur.V.length+' かど';
+    subEl.textContent='= 調べたかど '+k+' × '+cur.defect+'°';
+    barEl.style.width=(k/cur.V.length*100)+'%';
+    if(k===cur.V.length){tgtEl.textContent='720° = 4π ✓';tgtEl.classList.add('done');}
+    else{tgtEl.textContent='目標 720° = 4π';tgtEl.classList.remove('done');}
+  }
+
+  function drawFan(){
+    var cx=75,cy=80,R=54,s='',n=cur.n,fa=cur.fa,def=cur.defect;
+    for(var i=0;i<n;i++){
+      var a0=(-90+fa*i)*Math.PI/180,a1=(-90+fa*(i+1))*Math.PI/180;
+      var x0=cx+R*Math.cos(a0),y0=cy+R*Math.sin(a0),x1=cx+R*Math.cos(a1),y1=cy+R*Math.sin(a1);
+      var big=fa>180?1:0;
+      s+='<path d="M'+cx+' '+cy+' L'+x0.toFixed(1)+' '+y0.toFixed(1)+' A'+R+' '+R+' 0 '+big+' 1 '+x1.toFixed(1)+' '+y1.toFixed(1)+' Z" fill="rgba(86,107,120,0.12)" stroke="#b6ae9a" stroke-width="1.1"/>';
+    }
+    var g0=(-90+fa*n)*Math.PI/180,g1=(-90+360)*Math.PI/180;
+    var gx0=cx+R*Math.cos(g0),gy0=cy+R*Math.sin(g0),gx1=cx+R*Math.cos(g1),gy1=cy+R*Math.sin(g1);
+    var gbig=def>180?1:0;
+    s+='<path d="M'+cx+' '+cy+' L'+gx0.toFixed(1)+' '+gy0.toFixed(1)+' A'+R+' '+R+' 0 '+gbig+' 1 '+gx1.toFixed(1)+' '+gy1.toFixed(1)+' Z" fill="rgba(185,138,62,0.2)" stroke="#b98a3e" stroke-width="1.4" stroke-dasharray="4 3"/>';
+    s+='<circle cx="'+cx+'" cy="'+cy+'" r="3" fill="#332f28"/>';
+    document.getElementById('fan').innerHTML=s;
+    document.getElementById('fantxt').innerHTML='<b>'+cur.name+'</b>のかどには、'+cur.poly+'が <b>'+cur.n+'枚</b> 集まる（'+(cur.n*cur.fa)+'°）。360° には <span style="color:#b98a3e">'+cur.defect+'°</span> 足りない——この隙間が、そのかどの“丸み”。';
+    document.getElementById('sinfo').innerHTML='<b>'+cur.name+'</b>：'+cur.poly+' '+cur.n+'枚（'+(cur.n*cur.fa)+'°）→ かどごとに '+cur.defect+'° 足りない ・ 全 '+cur.V.length+' かど';
+  }
+
+  function selectSolid(s){
+    cur=s;mv=s.V.map(function(){return false;});step=0;flash=-1;
+    document.querySelectorAll('#tabs button').forEach(function(b){b.classList.toggle('on',b.dataset.k===s.key);});
+    drawFan();update();
+  }
+
+  var tabs=document.getElementById('tabs');
+  SOLIDS.forEach(function(s){var b=document.createElement('button');b.textContent=s.name;b.dataset.k=s.key;b.onclick=function(){selectSolid(s);};tabs.appendChild(b);});
+
+  document.getElementById('step').addEventListener('click',function(){
+    while(step<cur.V.length&&mv[cur.order[step]])step++;
+    if(step<cur.V.length){var idx=cur.order[step];mv[idx]=true;flash=idx;flashT=performance.now();step++;}
+    update();
+  });
+  document.getElementById('all').addEventListener('click',function(){mv=mv.map(function(){return true;});step=cur.V.length;flash=-1;update();});
+  document.getElementById('reset').addEventListener('click',function(){mv=mv.map(function(){return false;});step=0;flash=-1;update();});
+
+  cv.addEventListener('pointerdown',function(e){drag=true;px=e.clientX;py=e.clientY;cv.setPointerCapture(e.pointerId);});
+  cv.addEventListener('pointermove',function(e){if(!drag)return;ay+=(e.clientX-px)*0.008;ax+=(e.clientY-py)*0.008;px=e.clientX;py=e.clientY;});
+  cv.addEventListener('pointerup',function(){drag=false;});
+  cv.addEventListener('pointercancel',function(){drag=false;});
+
+  function loop(t){if(!drag)ay+=autov;if(flash>=0&&t-flashT>800)flash=-1;draw();requestAnimationFrame(loop);}
+  selectSolid(cur);requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

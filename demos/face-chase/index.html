@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0a06">
+<meta name="description" content="選んだ顔が追いかけてくる、バックルーム風3D鬼ごっこ。ブラウザだけで遊べます。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="FACE CHASE — 顔から逃げろ">
+<meta property="og:description" content="自分で選んだ顔が、黄ばんだ迷路の向こうから追ってくる。鍵を5つ集めて脱出しろ。画像は端末内だけで処理されます。">
+<meta property="og:image" content="ogp.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<title>FACE CHASE — 顔から逃げろ</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0a06; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; color: #e8e3c8;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+  }
+  /* touch-action はキャンバスだけに効かせる。body に付けるとメニューが
+     スクロールできなくなる（ゲームを中断して設定に戻ったときに詰む） */
+  canvas { display: block; touch-action: none; }
+  body.touch { overscroll-behavior: none; }
+
+  /* 中身が画面より高いとき、align-items:center だと上にはみ出た分へ
+     スクロールで到達できない。縦フレックス＋margin:auto なら、
+     余白があるときだけ中央寄せになり、足りないときは上端から始まる */
+  .screen {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column;
+    background: radial-gradient(circle at 50% 40%, #1c1a10 0%, #060503 100%);
+    overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: auto;
+    padding: calc(26px + env(safe-area-inset-top)) 24px calc(26px + env(safe-area-inset-bottom));
+  }
+  .screen.hidden { display: none; }
+  .panel { width: min(760px, 100%); margin: auto; }
+
+  h1 { font-size: 34px; letter-spacing: .28em; font-weight: 800; color: #e9d76a; }
+  h1 small { display: block; font-size: 12px; letter-spacing: .3em; color: #8d8560; margin-top: 8px; font-weight: 500; }
+  .lead { margin: 18px 0 22px; font-size: 13px; line-height: 2; color: #b3ad8c; }
+  .lead b { color: #e9d76a; }
+
+  .block { border: 1px solid #33301f; border-radius: 10px; padding: 16px; margin-bottom: 14px; background: rgba(255,255,255,.02); }
+  .block h2 { font-size: 11px; letter-spacing: .2em; color: #8d8560; margin-bottom: 12px; font-weight: 600; }
+
+  input[type=file] { display: none; }
+  .btn {
+    display: inline-block; border: 1px solid #55502f; background: #191709; color: #e8e3c8;
+    padding: 10px 18px; border-radius: 6px; font-size: 13px; cursor: pointer;
+    transition: .15s; font-family: inherit;
+  }
+  .btn:hover { background: #2a2610; border-color: #8a8047; }
+  .btn.primary { background: #d8c04a; color: #14120a; border-color: #d8c04a; font-weight: 700; letter-spacing: .1em; padding: 14px 34px; font-size: 15px; }
+  .btn.primary:hover { background: #f0d95e; }
+  .btn:disabled { opacity: .35; cursor: not-allowed; }
+
+  #thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  #thumbs img { width: 60px; height: 60px; object-fit: cover; border-radius: 50%; border: 2px solid #55502f; }
+  #thumbs:empty { display: none; }
+
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { border: 1px solid #33301f; background: transparent; color: #b3ad8c; padding: 8px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; font-family: inherit; }
+  .opt.on { background: #d8c04a; color: #14120a; border-color: #d8c04a; font-weight: 700; }
+
+  .keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 18px; font-size: 12px; color: #b3ad8c; }
+  .keys kbd { display: inline-block; min-width: 22px; text-align: center; background: #2a2610; border: 1px solid #55502f; border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; margin-right: 6px; font-size: 11px; font-family: inherit; }
+
+  /* margin は指定しない。.panel の margin:auto（縦中央寄せ）を打ち消してしまうため */
+  .center { text-align: center; }
+  .note { font-size: 11px; color: #6c6750; margin-top: 10px; line-height: 1.8; }
+
+  /* ---- HUD ---- */
+  #hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; display: none; }
+  #hud.on { display: block; }
+  #stats { position: absolute; top: 18px; left: 20px; font-size: 12px; letter-spacing: .12em; color: #cfc79a; text-shadow: 0 0 8px #000; line-height: 1.9; }
+  #stats .big { font-size: 22px; font-weight: 800; color: #e9d76a; }
+  #msg { position: absolute; top: 20px; left: 0; right: 0; text-align: center; font-size: 14px; letter-spacing: .16em; color: #e9d76a; text-shadow: 0 0 12px #000; opacity: 0; transition: opacity .35s; }
+  #msg.on { opacity: 1; }
+  #cross { position: absolute; top: 50%; left: 50%; width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: rgba(233,215,106,.5); }
+
+  .edge { position: absolute; opacity: 0; transition: opacity .12s linear; }
+  #eL { left: 0; top: 0; bottom: 0; width: 22vw; background: linear-gradient(to right, rgba(200,20,20,.85), transparent); }
+  #eR { right: 0; top: 0; bottom: 0; width: 22vw; background: linear-gradient(to left, rgba(200,20,20,.85), transparent); }
+  #eB { left: 0; right: 0; bottom: 0; height: 18vh; background: linear-gradient(to top, rgba(200,20,20,.9), transparent); }
+  #eF { position: absolute; inset: 0; box-shadow: inset 0 0 22vh 8vh rgba(150,10,10,.9); }
+  #behindTag { position: absolute; bottom: 6vh; left: 0; right: 0; text-align: center; font-size: 13px; letter-spacing: .3em; font-weight: 700; color: #ffdada; text-shadow: 0 0 10px #000; opacity: 0; transition: opacity .12s; }
+
+  #endTitle { font-size: 30px; letter-spacing: .2em; font-weight: 800; }
+  #endTitle.bad { color: #d9534f; }
+  #endTitle.good { color: #7bd94f; }
+  #endBody { margin: 16px 0 24px; font-size: 14px; line-height: 2.1; color: #b3ad8c; }
+
+  /* ---- タッチUI（モバイル） ---- */
+  #touchUI { position: fixed; inset: 0; z-index: 20; display: none; pointer-events: none; }
+  #touchUI.on { display: block; }
+
+  #stickBase {
+    position: absolute; width: 132px; height: 132px; margin: -66px 0 0 -66px;
+    border: 2px solid rgba(233,215,106,.35); border-radius: 50%;
+    background: rgba(0,0,0,.22); opacity: 0; transition: opacity .12s;
+  }
+  #stickKnob {
+    position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px;
+    border-radius: 50%; background: rgba(233,215,106,.5); opacity: 0;
+    transition: opacity .12s, background .12s, box-shadow .12s;
+  }
+  /* 大きく倒すとダッシュに入る。ノブが光ることでその境目が分かる */
+  #stickKnob.run { background: rgba(255,235,130,.95); box-shadow: 0 0 18px rgba(255,235,130,.85); }
+  #stickBase.on, #stickKnob.on { opacity: 1; }
+
+  .tbtn {
+    position: absolute; pointer-events: auto;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    border: 2px solid rgba(233,215,106,.4); border-radius: 50%;
+    background: rgba(20,18,10,.55); color: #e9d76a;
+    font-size: 11px; font-weight: 700; letter-spacing: .06em; line-height: 1.35;
+    font-family: inherit;
+  }
+  .tbtn:active { background: rgba(233,215,106,.35); color: #14120a; }
+  #btnTurn { right: 26px; bottom: calc(34px + env(safe-area-inset-bottom)); width: 96px; height: 96px; font-size: 13px; }
+  /* 押している間だけ後ろを向く。押しっぱなしが分かるよう、点灯状態を強めに出す */
+  #btnTurn.held { background: rgba(233,215,106,.8); color: #14120a; border-color: #f4e58a; }
+  #btnPause{ right: 16px; top: calc(16px + env(safe-area-inset-top)); width: 44px; height: 44px; font-size: 16px; border-radius: 8px; }
+
+  /* 端末回転の案内 */
+  #rotate {
+    position: fixed; inset: 0; z-index: 90; display: none;
+    align-items: center; justify-content: center; text-align: center;
+    background: #0b0a06; color: #b3ad8c; font-size: 14px; line-height: 2; padding: 30px;
+  }
+  #rotate.on { display: flex; }
+
+  /* ---- 狭い画面：1画面に収まる情報量まで詰める ---- */
+  @media (max-width: 560px) {
+    .screen { padding-left: 18px; padding-right: 18px; }
+    h1 { font-size: 25px; letter-spacing: .18em; }
+    h1 small { font-size: 10px; margin-top: 6px; }
+    .lead { font-size: 12.5px; line-height: 1.85; margin: 14px 0 16px; }
+    .block { padding: 13px; margin-bottom: 11px; }
+    .block h2 { margin-bottom: 10px; }
+    .keys { grid-template-columns: 1fr 1fr; gap: 5px 10px; font-size: 11px; }
+    .opts { flex-direction: column; align-items: stretch; }
+    .opt { text-align: center; font-size: 12px; padding: 9px 10px; }
+    .btn { padding: 9px 14px; font-size: 12.5px; }
+    .btn.primary { width: 100%; padding: 15px 0; }
+    #thumbs img { width: 52px; height: 52px; }
+  }
+
+  /* 横持ちで画面が低いときは、縦方向をさらに詰める */
+  @media (max-height: 460px) and (orientation: landscape) {
+    h1 { font-size: 21px; }
+    .lead { font-size: 11.5px; line-height: 1.7; margin: 10px 0 12px; }
+    .block { padding: 10px; margin-bottom: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= START SCREEN ================= -->
+<div class="screen" id="startScreen">
+  <div class="panel">
+    <h1>FACE CHASE<small>BACKROOMS EDITION</small></h1>
+    <p class="lead">
+      黄ばんだ蛍光灯の迷路。あなたが選んだ<b>顔</b>が、暗がりの向こうから近づいてくる。<br>
+      顔は<b>通路をふさぐ大きさ</b>で迫ってくる。壁際をすり抜けることはできない。引き返せ。<br>
+      <b>鍵を全部集めて、緑の出口へ。</b>顔に触れられたら終わり。<br>
+      顔は普段うろついているが、<b>見つかるか、足音を聞かれる</b>と最短距離で追ってくる。<br>
+      <b>走ると音が遠くまで届く。</b>逃げるための全力疾走が、別の顔を呼ぶ。<br>
+      <b>見つめられた顔は動きが鈍る。</b>挟まれたら、片側を睨みながら退がれ。
+    </p>
+
+    <div class="block">
+      <h2>1. 追ってくる顔を選ぶ</h2>
+      <label class="btn" for="fileIn">画像を選ぶ（複数可）</label>
+      <input type="file" id="fileIn" accept="image/*" multiple>
+      <button class="btn" id="sampleBtn">サンプル顔で遊ぶ</button>
+      <div id="thumbs"></div>
+    </div>
+
+    <div class="block">
+      <h2>2. 難易度</h2>
+      <div class="opts" id="diffOpts">
+        <button class="opt" data-d="0">EASY — 顔3体 / 遅い</button>
+        <button class="opt on" data-d="1">NORMAL — 顔4体</button>
+        <button class="opt" data-d="2">NIGHTMARE — 顔6体 / 速い / 視界狭い</button>
+      </div>
+    </div>
+
+    <div class="block">
+      <h2>3. 操作</h2>
+      <div class="keys" id="keysPC">
+        <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 移動</div>
+        <div><kbd>マウス</kbd> 視点</div>
+        <div><kbd>Shift</kbd> ダッシュ（スタミナ）</div>
+        <div><kbd>R</kbd> 押している間だけ後ろを見る</div>
+        <div><kbd>Q</kbd><kbd>E</kbd> 90°向きを変える</div>
+        <div><kbd>Esc</kbd> 一時停止</div>
+      </div>
+      <div class="keys" id="keysTouch" style="display:none">
+        <div><kbd>左半分</kbd> なぞって移動</div>
+        <div><kbd>右半分</kbd> なぞって視点</div>
+        <div><kbd>後ろを見る</kbd> 押している間だけ背後を確認（走る向きは変わらない）</div>
+        <div><kbd>大きく倒す</kbd> ダッシュ（スタミナ）</div>
+        <div><kbd>II</kbd> 一時停止</div>
+        <div><kbd>横持ち</kbd> 推奨</div>
+      </div>
+      <p class="note">画面端が赤く光ったら、その方向に顔がいる。真っ赤に囲まれたら正面。</p>
+    </div>
+
+    <div class="center">
+      <button class="btn primary" id="startBtn" disabled>顔を選んでください</button>
+      <p class="note">画像はブラウザ内でのみ処理され、どこにも送信されません。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ================= END SCREEN ================= -->
+<div class="screen hidden" id="endScreen">
+  <div class="panel center">
+    <div id="endTitle"></div>
+    <div id="endBody"></div>
+    <button class="btn primary" id="againBtn">もう一度</button>
+    <button class="btn" id="menuBtn">設定に戻る</button>
+  </div>
+</div>
+
+<!-- ================= PAUSE ================= -->
+<div class="screen hidden" id="pauseScreen">
+  <div class="panel center">
+    <div style="font-size:30px;letter-spacing:.2em;font-weight:800;color:#e9d76a">PAUSED</div>
+    <div style="margin:16px 0 24px;font-size:13px;color:#b3ad8c">画面をクリックすると再開します</div>
+    <button class="btn primary" id="resumeBtn">再開</button>
+    <button class="btn" id="quitBtn">やめる</button>
+  </div>
+</div>
+
+<!-- ================= HUD ================= -->
+<div id="hud">
+  <div id="eF" class="edge"></div>
+  <div id="eL" class="edge"></div>
+  <div id="eR" class="edge"></div>
+  <div id="eB" class="edge"></div>
+  <div id="cross"></div>
+  <div id="stats"></div>
+  <div id="msg"></div>
+  <div id="behindTag">▼ 背 後 ▼</div>
+</div>
+
+<!-- ================= TOUCH UI ================= -->
+<div id="touchUI">
+  <div id="stickBase"></div>
+  <div id="stickKnob"></div>
+  <button class="tbtn" id="btnTurn">後ろを<br>見る</button>
+  <button class="tbtn" id="btnPause">II</button>
+</div>
+
+<div id="rotate">画面を横向きにしてください<br><span style="font-size:11px;color:#6c6750">横持ちのほうが見える範囲が広くなります</span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+
+/* =======================================================================
+   FACE CHASE — Backrooms Edition
+   単一HTML / Three.js r128 / 影・ポストプロセスなしの低負荷構成
+   ======================================================================= */
+
+// ---------- 定数 ----------
+var CELLS   = 11;              // 迷路セル数（奇数グリッドは 2*CELLS+1）
+var GW      = CELLS * 2 + 1;   // グリッド幅
+var GH      = CELLS * 2 + 1;   // グリッド高
+var CS      = 3.0;             // 1グリッドの一辺（m）
+var WALL_H  = 3.4;             // 壁の高さ
+var PR      = 0.34;            // プレイヤー半径
+var EYE     = 1.62;            // 目線の高さ
+var KEYS_N  = 4;               // 集める鍵の数
+
+// --- 顔のサイズと当たり判定 ---
+// 顔は通路をふさぐ「壁」として扱う。プレイヤーが壁際に寄れる最大の横ずれは
+// CS/2 - PR = 1.16m なので、判定半径をそれより大きく取ればすり抜けは幾何的に不可能。
+// 一方、斜め隣の通路との最短距離は sqrt(1.5^2+1.5^2) + PR = 2.46m なので、
+// 判定半径を 1.16 〜 2.46 の間に置けば「壁越しに捕まる」事故も起きない。
+var FACE_W  = 3.25;            // 顔の表示サイズ（通路幅3.0mを覆う）
+var CATCH   = 1.45;            // 捕獲距離（顔の見た目の縁とほぼ一致）
+
+// sight = 顔がプレイヤーを視認できる距離。フォグで見通せる距離とほぼ揃えてあり、
+// 「こちらから見える顔は、向こうからも見えている」という対称性を保つ（理不尽さの排除）
+// stalkN = 凝視型の体数。「常に居場所を知っている」個体を増やすと、通路をふさぐ強さと
+// 噛み合って一気に理不尽になる。多くても2体に留める
+var DIFF = [
+  { name:'EASY',      foes:3, speed:1.75, fog:0.050, stalkN:1, sight:24 },
+  { name:'NORMAL',    foes:4, speed:2.05, fog:0.060, stalkN:1, sight:21 },
+  { name:'NIGHTMARE', foes:6, speed:2.45, fog:0.078, stalkN:2, sight:17 }
+];
+
+// --- 発見と失踪 ---
+var LOSE_TIME = 8.0;   // 見失ってから追跡をやめるまでの秒数
+var HEAR_WALK = 5.0;   // 歩いている音が通路沿いに届く距離
+var HEAR_RUN  = 15.0;  // 走っている音が届く距離（走れば逃げられるが、別の顔を呼ぶ）
+var NOTICE_R  = 3.5;   // 音も視線も関係なく気づかれる至近距離
+var PATROL_SP = 0.50;  // 徘徊中の速度倍率
+
+var WALK = 3.5, RUN = 5.4;     // プレイヤー速度（m/s）
+var ST_DRAIN = 0.26, ST_REGEN = 0.26;   // スタミナの消費 / 回復（毎秒）
+var GAZE_SLOW = 0.35;          // 見つめられている追跡型の速度倍率（凝視型は完全停止）
+
+// ---------- 状態 ----------
+var renderer, scene, camera, clock;
+var grid, open = [];           // grid[z][x] : 1=壁 0=通路
+var foes = [], keys3d = [], exitMesh = null, exitGlow = null;
+var faceTextures = [];
+var state = 'menu';            // menu | play | pause | end
+var diffIdx = 1;
+var yaw = 0, pitch = 0;
+var vel = { x:0, z:0 };
+var pos = { x:0, z:0 };
+var stamina = 1, keysGot = 0, t0 = 0, elapsed = 0;
+var held = {};
+var audioCtx = null, droneGain = null;
+
+// ---------- タッチ入力 ----------
+var IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+var STICK_R  = 52;                       // スティックの最大変位（px）
+var mvId = null, lkId = null;            // 移動 / 視点 の touch identifier
+var mvOx = 0, mvOy = 0;                  // スティック原点
+var mvX  = 0, mvY  = 0;                  // -1..1（右, 前）
+var lkX  = 0, lkY  = 0;                  // 前フレームの視点タッチ座標
+var backBtn = false;                     // 「後ろを見る」を押している間だけ true
+
+var $ = function(id){ return document.getElementById(id); };
+
+/* =======================================================================
+   1. プロシージャルテクスチャ（外部画像ゼロ）
+   ======================================================================= */
+function makeCanvas(s){
+  var c = document.createElement('canvas'); c.width = c.height = s; return c;
+}
+function noise(ctx, s, amt, alpha){
+  var img = ctx.getImageData(0,0,s,s), d = img.data;
+  for (var i=0;i<d.length;i+=4){
+    var n = (Math.random()-0.5)*amt;
+    d[i]   = Math.max(0,Math.min(255,d[i]  +n));
+    d[i+1] = Math.max(0,Math.min(255,d[i+1]+n));
+    d[i+2] = Math.max(0,Math.min(255,d[i+2]+n*0.7));
+    if (alpha !== undefined) d[i+3] = alpha;
+  }
+  ctx.putImageData(img,0,0);
+}
+function wallpaperTex(){
+  var s=256, c=makeCanvas(s), x=c.getContext('2d');
+  x.fillStyle='#cbb95f'; x.fillRect(0,0,s,s);
+  // 縦ストライプ
+  for (var i=0;i<s;i+=16){
+    x.fillStyle = (i/16)%2 ? 'rgba(180,160,70,.30)' : 'rgba(225,210,130,.22)';
+    x.fillRect(i,0,8,s);
+  }
+  // 染み
+  for (var k=0;k<14;k++){
+    var gx=Math.random()*s, gy=Math.random()*s, r=8+Math.random()*34;
+    var g=x.createRadialGradient(gx,gy,0,gx,gy,r);
+    g.addColorStop(0,'rgba(110,92,38,.30)'); g.addColorStop(1,'rgba(110,92,38,0)');
+    x.fillStyle=g; x.beginPath(); x.arc(gx,gy,r,0,6.3); x.fill();
+  }
+  noise(x,s,26);
+  var t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+function carpetTex(){
+  var s=256, c=makeCanvas(s), x=c.getContext('2d');
+  x.fillStyle='#7d7038'; x.fillRect(0,0,s,s);
+  for (var k=0;k<2600;k++){
+    x.fillStyle='rgba('+(70+Math.random()*80|0)+','+(62+Math.random()*70|0)+',30,.5)';
+    x.fillRect(Math.random()*s, Math.random()*s, 2, 2);
+  }
+  noise(x,s,34);
+  var t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+function ceilingTex(){
+  var s=256, c=makeCanvas(s), x=c.getContext('2d');
+  x.fillStyle='#ddd8bd'; x.fillRect(0,0,s,s);
+  x.strokeStyle='rgba(120,115,90,.55)'; x.lineWidth=3;
+  x.strokeRect(1.5,1.5,s-3,s-3);
+  x.beginPath(); x.moveTo(s/2,0); x.lineTo(s/2,s); x.moveTo(0,s/2); x.lineTo(s,s/2); x.stroke();
+  noise(x,s,20);
+  var t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+
+/* =======================================================================
+   2. 顔テクスチャ（ユーザー画像 → 楕円マスク付きスプライト用）
+   ======================================================================= */
+function faceTextureFromImage(img){
+  var S = 256, c = makeCanvas(S), x = c.getContext('2d');
+
+  // cover fit（中央トリミング）
+  var sc = Math.max(S/img.width, S/img.height);
+  var w = img.width*sc, h = img.height*sc;
+  x.drawImage(img, (S-w)/2, (S-h)/2, w, h);
+
+  // コントラスト強調＋わずかに寒色へ（不気味さ）
+  var d = x.getImageData(0,0,S,S), p = d.data;
+  for (var i=0;i<p.length;i+=4){
+    for (var j=0;j<3;j++){
+      var v = p[i+j]/255;
+      v = (v-0.5)*1.22 + 0.44;                 // contrast + 少し暗く
+      p[i+j] = Math.max(0, Math.min(255, v*255));
+    }
+    p[i+2] = Math.min(255, p[i+2]*1.06);       // 青みを少し
+  }
+  x.putImageData(d,0,0);
+
+  // 楕円ソフトマスク。矩形の縁は消しつつ、不透明な芯を通路幅いっぱいまで広げる
+  // （0.86 = 芯の直径がスプライトの86%。壁際でもアルファが残り、隙間が見えない）
+  var m = makeCanvas(S), mx = m.getContext('2d');
+  var g = mx.createRadialGradient(S/2,S/2,S*0.30, S/2,S/2,S*0.50);
+  g.addColorStop(0.00,'rgba(0,0,0,1)');
+  g.addColorStop(0.86,'rgba(0,0,0,1)');
+  g.addColorStop(1.00,'rgba(0,0,0,0)');
+  mx.fillStyle=g; mx.fillRect(0,0,S,S);
+  x.globalCompositeOperation='destination-in';
+  x.drawImage(m,0,0);
+  x.globalCompositeOperation='source-over';
+
+  var t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+// 鍵と出口の光。フォグを無視して遠くからでも見えるが、壁には隠れる。
+// 「どこへ向かえばいいか分からないまま彷徨う」時間を減らすための道しるべ
+var glowTex = null;
+function glowTexture(){
+  if (glowTex) return glowTex;
+  var S=128, c=makeCanvas(S), x=c.getContext('2d');
+  var g=x.createRadialGradient(S/2,S/2,0, S/2,S/2,S/2);
+  g.addColorStop(0.00,'rgba(255,244,190,1)');
+  g.addColorStop(0.22,'rgba(255,226,110,0.50)');
+  g.addColorStop(1.00,'rgba(255,215,80,0)');
+  x.fillStyle=g; x.fillRect(0,0,S,S);
+  glowTex = new THREE.CanvasTexture(c);
+  return glowTex;
+}
+function makeGlow(color, size){
+  var s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture(), color: color, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+  }));
+  s.scale.set(size, size, 1);
+  return s;
+}
+
+// サンプル顔（画像なしでも遊べる）
+function sampleFaceTexture(seed){
+  var S=256, c=makeCanvas(S), x=c.getContext('2d');
+  var hue = [28, 12, 40, 6][seed % 4];
+  x.fillStyle='hsl('+hue+',26%,'+(58 - seed*4)+'%)';
+  x.beginPath(); x.ellipse(S/2,S/2,S*0.47,S*0.49,0,0,6.3); x.fill();
+  // 目
+  var ey = S*0.44, ex = S*0.19, r = 19 + (seed%3)*4;
+  ['#f4f0e4','#f4f0e4'].forEach(function(col,i){
+    var cx = S/2 + (i? ex : -ex);
+    x.fillStyle=col; x.beginPath(); x.ellipse(cx,ey,r,r*0.78,0,0,6.3); x.fill();
+    x.fillStyle='#0a0a0a'; x.beginPath(); x.arc(cx,ey,r*0.46,0,6.3); x.fill();
+  });
+  // 口
+  x.strokeStyle='#2a1410'; x.lineWidth=9; x.beginPath();
+  x.arc(S/2, S*0.62, S*0.20, 0.15*Math.PI + (seed%2?Math.PI:0), 0.85*Math.PI + (seed%2?Math.PI:0));
+  x.stroke();
+  noise(x,S,18);
+  // マスク
+  var m=makeCanvas(S), mx=m.getContext('2d');
+  var g=mx.createRadialGradient(S/2,S/2,S*0.30,S/2,S/2,S*0.50);
+  g.addColorStop(0,'rgba(0,0,0,1)'); g.addColorStop(0.86,'rgba(0,0,0,1)'); g.addColorStop(1,'rgba(0,0,0,0)');
+  mx.fillStyle=g; mx.fillRect(0,0,S,S);
+  x.globalCompositeOperation='destination-in'; x.drawImage(m,0,0);
+  var t=new THREE.CanvasTexture(c); t.minFilter=THREE.LinearFilter; return t;
+}
+
+/* =======================================================================
+   3. 迷路生成（再帰的バックトラッカー）
+   ======================================================================= */
+function genMaze(){
+  grid = [];
+  var z, x;
+  for (z=0; z<GH; z++){ grid[z]=[]; for (x=0; x<GW; x++) grid[z][x]=1; }
+
+  var stack = [[1,1]];
+  grid[1][1] = 0;
+  var dirs = [[0,-2],[0,2],[-2,0],[2,0]];
+  while (stack.length){
+    var cur = stack[stack.length-1];
+    var cand = [];
+    for (var i=0;i<4;i++){
+      var nx = cur[0]+dirs[i][0], nz = cur[1]+dirs[i][1];
+      if (nx>0 && nz>0 && nx<GW-1 && nz<GH-1 && grid[nz][nx]===1) cand.push([nx,nz,dirs[i]]);
+    }
+    if (!cand.length){ stack.pop(); continue; }
+    var pick = cand[Math.random()*cand.length|0];
+    grid[cur[1] + pick[2][1]/2][cur[0] + pick[2][0]/2] = 0;
+    grid[pick[1]][pick[0]] = 0;
+    stack.push([pick[0], pick[1]]);
+  }
+
+  /* ループを作る。顔が通路をふさぐ以上、死因の大半は「追いつかれる」ではなく
+     「挟まれる」。迂回路の量が難易度を最も強く支配する。
+     0.34 では、1体で迷路を二分できるセルが24%→6%まで減る一方、
+     通路セル率は48%→52%しか増えず、袋小路の多い迷路らしさは保たれる */
+  var loops = Math.floor(GW*GH*0.34);
+  for (var k=0; k<loops; k++){
+    var rx = 1 + (Math.random()*(GW-2)|0), rz = 1 + (Math.random()*(GH-2)|0);
+    if (grid[rz][rx]!==1) continue;
+    var horiz = grid[rz][rx-1]===0 && grid[rz][rx+1]===0 && grid[rz-1][rx]===1 && grid[rz+1][rx]===1;
+    var vert  = grid[rz-1][rx]===0 && grid[rz+1][rx]===0 && grid[rz][rx-1]===1 && grid[rz][rx+1]===1;
+    if (horiz || vert) grid[rz][rx]=0;
+  }
+
+  open = [];
+  for (z=0; z<GH; z++) for (x=0; x<GW; x++) if (!grid[z][x]) open.push([x,z]);
+}
+
+function cellCenter(gx,gz){ return { x:(gx+0.5)*CS, z:(gz+0.5)*CS }; }
+function solidAt(gx,gz){
+  if (gx<0||gz<0||gx>=GW||gz>=GH) return true;
+  return grid[gz][gx]===1;
+}
+function gridOf(wx,wz){ return { x: Math.floor(wx/CS), z: Math.floor(wz/CS) }; }
+
+/* =======================================================================
+   4. BFS 経路探索（顔 → プレイヤー）
+   ======================================================================= */
+var bfsDist = null;   // プレイヤーからの全セル距離場（毎フレーム1回だけ計算）
+
+// 任意の始点から全セルへの歩数を求める。out を渡せば再利用して確保を避ける
+function buildField(sx, sz, out){
+  var N = GW*GH;
+  var f = out || new Int32Array(N);
+  f.fill(-1);
+  if (solidAt(sx,sz)) return f;
+  var q = new Int32Array(N), head=0, tail=0;
+  var s = sz*GW+sx;
+  f[s]=0; q[tail++]=s;
+  while (head<tail){
+    var cur = q[head++], cx = cur%GW, cz = (cur/GW)|0, d = f[cur]+1;
+    // 4近傍
+    if (cx>0    && !solidAt(cx-1,cz) && f[cur-1]<0)  { f[cur-1]=d;  q[tail++]=cur-1; }
+    if (cx<GW-1 && !solidAt(cx+1,cz) && f[cur+1]<0)  { f[cur+1]=d;  q[tail++]=cur+1; }
+    if (cz>0    && !solidAt(cx,cz-1) && f[cur-GW]<0) { f[cur-GW]=d; q[tail++]=cur-GW; }
+    if (cz<GH-1 && !solidAt(cx,cz+1) && f[cur+GW]<0) { f[cur+GW]=d; q[tail++]=cur+GW; }
+  }
+  return f;
+}
+function buildDistanceField(sx,sz){
+  bfsDist = buildField(sx, sz, bfsDist || new Int32Array(GW*GH));
+}
+// 距離場を1マス下る方向を返す
+function stepDownhill(field, gx, gz){
+  if (!field) return null;
+  var best=null, bd = field[gz*GW+gx];
+  if (bd < 0) return null;
+  var n = [[gx-1,gz],[gx+1,gz],[gx,gz-1],[gx,gz+1]];
+  for (var i=0;i<4;i++){
+    var nx=n[i][0], nz=n[i][1];
+    if (solidAt(nx,nz)) continue;
+    var d = field[nz*GW+nx];
+    if (d>=0 && d<bd){ bd=d; best=[nx,nz]; }
+  }
+  return best;
+}
+
+// 視線判定（グリッドをサンプリング）
+function lineOfSight(ax,az,bx,bz){
+  var dx=bx-ax, dz=bz-az, len=Math.sqrt(dx*dx+dz*dz);
+  if (len<0.001) return true;
+  var steps = Math.ceil(len/0.25);
+  for (var i=1;i<steps;i++){
+    var t=i/steps, g=gridOf(ax+dx*t, az+dz*t);
+    if (solidAt(g.x,g.z)) return false;
+  }
+  return true;
+}
+
+/* =======================================================================
+   5. シーン構築
+   ======================================================================= */
+function buildScene(){
+  var d = DIFF[diffIdx];
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x14120a, d.fog);
+  scene.background = new THREE.Color(0x14120a);
+
+  camera = new THREE.PerspectiveCamera(74, innerWidth/innerHeight, 0.05, 90);
+
+  // --- 光（影なし・実質ゼロコスト） ---
+  scene.add(new THREE.AmbientLight(0xfff0c0, 0.55));
+  scene.add(new THREE.HemisphereLight(0xfff4cc, 0x2b2410, 0.85));
+  var dir = new THREE.DirectionalLight(0xffffff, 0.28);
+  dir.position.set(0.4, 1, 0.25);
+  scene.add(dir);
+
+  var W = GW*CS, H = GH*CS;
+
+  // --- 床 ---
+  var ct = carpetTex(); ct.repeat.set(GW*1.5, GH*1.5);
+  var floor = new THREE.Mesh(new THREE.PlaneGeometry(W,H),
+    new THREE.MeshLambertMaterial({ map: ct }));
+  floor.rotation.x = -Math.PI/2; floor.position.set(W/2, 0, H/2);
+  scene.add(floor);
+
+  // --- 天井 ---
+  var cet = ceilingTex(); cet.repeat.set(GW, GH);
+  var ceil = new THREE.Mesh(new THREE.PlaneGeometry(W,H),
+    new THREE.MeshLambertMaterial({ map: cet }));
+  ceil.rotation.x = Math.PI/2; ceil.position.set(W/2, WALL_H, H/2);
+  scene.add(ceil);
+
+  // --- 壁：InstancedMesh（描画コール1回） ---
+  var wallCells = [];
+  for (var z=0;z<GH;z++) for (var x=0;x<GW;x++) if (grid[z][x]) wallCells.push([x,z]);
+  var box = new THREE.BoxGeometry(CS, WALL_H, CS);
+  var wallMat = new THREE.MeshLambertMaterial({ map: wallpaperTex() });
+  var walls = new THREE.InstancedMesh(box, wallMat, wallCells.length);
+  var m4 = new THREE.Matrix4();
+  for (var i=0;i<wallCells.length;i++){
+    var c = cellCenter(wallCells[i][0], wallCells[i][1]);
+    m4.makeTranslation(c.x, WALL_H/2, c.z);
+    walls.setMatrixAt(i, m4);
+  }
+  walls.instanceMatrix.needsUpdate = true;
+  scene.add(walls);
+
+  // --- 蛍光灯パネル：InstancedMesh（見た目だけ・光源ではない） ---
+  var lampCells = [];
+  for (var j=0;j<open.length;j++) if ((open[j][0]+open[j][1]*3) % 7 === 0) lampCells.push(open[j]);
+  if (lampCells.length){
+    var panel = new THREE.PlaneGeometry(CS*0.62, CS*0.62);
+    panel.rotateX(Math.PI/2);
+    var lamps = new THREE.InstancedMesh(panel,
+      new THREE.MeshBasicMaterial({ color: 0xfff6d8, fog: true }), lampCells.length);
+    for (var q=0;q<lampCells.length;q++){
+      var lc = cellCenter(lampCells[q][0], lampCells[q][1]);
+      m4.makeTranslation(lc.x, WALL_H-0.03, lc.z);
+      lamps.setMatrixAt(q, m4);
+    }
+    lamps.instanceMatrix.needsUpdate = true;
+    scene.add(lamps);
+  }
+}
+
+/* =======================================================================
+   6. エンティティ配置
+   ======================================================================= */
+function farCells(fromX, fromZ, minDist, count){
+  var pool = open.filter(function(c){
+    return Math.abs(c[0]-fromX) + Math.abs(c[1]-fromZ) >= minDist;
+  });
+  var out = [];
+  for (var i=0;i<count && pool.length;i++){
+    out.push(pool.splice(Math.random()*pool.length|0, 1)[0]);
+  }
+  return out;
+}
+
+function spawnEntities(){
+  var d = DIFF[diffIdx];
+  var start = open[0];
+  var sc = cellCenter(start[0], start[1]);
+  pos.x = sc.x; pos.z = sc.z;
+  yaw = 0; pitch = 0;
+
+  // 鍵
+  keys3d = [];
+  var kc = farCells(start[0], start[1], 8, KEYS_N);
+  for (var i=0;i<kc.length;i++){
+    var g = new THREE.Mesh(new THREE.OctahedronGeometry(0.26),
+      new THREE.MeshBasicMaterial({ color: 0xffe066, fog: false }));
+    g.add(makeGlow(0xffe066, 1.9));
+    var c = cellCenter(kc[i][0], kc[i][1]);
+    g.position.set(c.x, 1.0, c.z);
+    scene.add(g);
+    keys3d.push({ mesh:g, taken:false });
+  }
+
+  // 出口
+  var ec = farCells(start[0], start[1], 14, 1)[0] || open[open.length-1];
+  var ep = cellCenter(ec[0], ec[1]);
+  exitMesh = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.4, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0x2b4a2b, transparent:true, opacity:0.75 }));
+  exitMesh.position.set(ep.x, 1.2, ep.z);
+  exitGlow = makeGlow(0x4cd94c, 3.4);
+  exitGlow.visible = false;               // 鍵がそろうまでは光らない
+  exitMesh.add(exitGlow);
+  scene.add(exitMesh);
+
+  // 顔
+  foes = [];
+  var fc = farCells(start[0], start[1], 12, d.foes);
+  var nStalk = Math.min(d.stalkN, d.foes);          // 凝視型の体数
+  for (var k=0;k<d.foes;k++){
+    var cell = fc[k] || open[(Math.random()*open.length)|0];
+    var tex = faceTextures[k % faceTextures.length];
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, fog: true }));
+    spr.scale.set(FACE_W, FACE_W, 1);
+    var wc = cellCenter(cell[0], cell[1]);
+    spr.position.set(wc.x, WALL_H/2, wc.z);   // 床から天井まで通路をふさぐ
+    scene.add(spr);
+    var isStalker = k < nStalk;
+    var f = {
+      spr: spr,
+      x: wc.x, z: wc.z,
+      target: null,
+      // 凝視型は常にこちらの位置を知っているが遅い。追跡型は見つけたときだけ追うが速い
+      stalker: isStalker,
+      state: isStalker ? 'chase' : 'patrol',
+      lose: 0,
+      lastSeen: null,
+      field: null,        // 徘徊/捜索用の自前の距離場
+      goalCell: null,
+      phase: Math.random()*6.28,
+      speed: d.speed * (isStalker ? 0.62 : 1.0) * (0.88 + Math.random()*0.24)
+    };
+    if (!isStalker) pickPatrol(f);
+    foes.push(f);
+  }
+}
+
+// 徘徊先を決める。純粋なランダムだと迷路内をほとんど移動できず遭遇が起きないため、
+// 「プレイヤーが必ず行かなければならない場所」＝残りの鍵に寄せる
+function pickPatrol(f){
+  var cell = null;
+  var remaining = keys3d.filter(function(k){ return !k.taken; });
+  if (remaining.length && Math.random() < 0.55){
+    var m = remaining[(Math.random()*remaining.length)|0].mesh.position;
+    var g = gridOf(m.x, m.z);
+    cell = [g.x, g.z];
+  } else if (!remaining.length && exitMesh && Math.random() < 0.5){
+    var ge = gridOf(exitMesh.position.x, exitMesh.position.z);
+    cell = [ge.x, ge.z];
+  } else {
+    cell = open[(Math.random()*open.length)|0];
+  }
+  f.state = 'patrol';
+  f.goalCell = { x: cell[0], z: cell[1] };
+  f.field = buildField(cell[0], cell[1], f.field);
+}
+
+/* =======================================================================
+   7. 衝突（円 vs グリッドAABB）
+   ======================================================================= */
+function resolveCollision(p){
+  var g = gridOf(p.x, p.z);
+  for (var dz=-1; dz<=1; dz++){
+    for (var dx=-1; dx<=1; dx++){
+      var gx=g.x+dx, gz=g.z+dz;
+      if (!solidAt(gx,gz)) continue;
+      var minX=gx*CS, maxX=minX+CS, minZ=gz*CS, maxZ=minZ+CS;
+      var nx = Math.max(minX, Math.min(p.x, maxX));
+      var nz = Math.max(minZ, Math.min(p.z, maxZ));
+      var ox = p.x-nx, oz = p.z-nz;
+      var d2 = ox*ox + oz*oz;
+      if (d2 >= PR*PR) continue;
+      if (d2 > 1e-8){
+        var d = Math.sqrt(d2), push = PR-d;
+        p.x += ox/d*push; p.z += oz/d*push;
+      } else {
+        // 壁の内側に完全に埋まった場合、最も近い面へ押し出す
+        var cands = [[minX-PR,p.z],[maxX+PR,p.z],[p.x,minZ-PR],[p.x,maxZ+PR]];
+        var bi=0, bd=Infinity;
+        for (var i=0;i<4;i++){
+          var ddx=cands[i][0]-p.x, ddz=cands[i][1]-p.z, dd=ddx*ddx+ddz*ddz;
+          if (dd<bd){ bd=dd; bi=i; }
+        }
+        p.x=cands[bi][0]; p.z=cands[bi][1];
+      }
+    }
+  }
+}
+
+/* =======================================================================
+   8. オーディオ（ドローン＋接近ノイズ）
+   ======================================================================= */
+function initAudio(){
+  if (audioCtx) return;
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AC();
+
+    // ホワイトノイズ → ローパス → ゲイン
+    var len = audioCtx.sampleRate * 2;
+    var buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    var ch = buf.getChannelData(0);
+    for (var i=0;i<len;i++) ch[i] = (Math.random()*2-1) * 0.35;
+    var src = audioCtx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+
+    var lp = audioCtx.createBiquadFilter();
+    lp.type='lowpass'; lp.frequency.value = 340;
+
+    droneGain = audioCtx.createGain();
+    droneGain.gain.value = 0;
+
+    src.connect(lp); lp.connect(droneGain); droneGain.connect(audioCtx.destination);
+    src.start();
+
+    // 常時鳴る低い唸り
+    var osc = audioCtx.createOscillator();
+    osc.type='sine'; osc.frequency.value = 47;
+    var og = audioCtx.createGain(); og.gain.value = 0.035;
+    osc.connect(og); og.connect(audioCtx.destination); osc.start();
+  } catch(e){ audioCtx = null; }
+}
+function beep(freq, dur, vol){
+  if (!audioCtx) return;
+  var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.frequency.value = freq; o.type = 'triangle';
+  g.gain.setValueAtTime(vol, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + dur);
+}
+
+/* =======================================================================
+   9. 入力
+   ======================================================================= */
+function setupInput(){
+  document.addEventListener('keydown', function(e){
+    held[e.code] = true;
+    if (state !== 'play') return;
+    // R は「押している間だけ後ろを見る」。update 側で held を参照する
+    if (e.code === 'KeyQ'){ yaw += Math.PI/2; }
+    if (e.code === 'KeyE'){ yaw -= Math.PI/2; }
+  });
+  document.addEventListener('keyup', function(e){ held[e.code] = false; });
+
+  document.addEventListener('mousemove', function(e){
+    if (state !== 'play') return;
+    if (document.pointerLockElement !== renderer.domElement) return;
+    yaw   -= e.movementX * 0.0022;
+    pitch -= e.movementY * 0.0022;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch));
+  });
+
+  document.addEventListener('pointerlockchange', function(){
+    if (IS_TOUCH) return;
+    if (state === 'play' && document.pointerLockElement !== renderer.domElement) pause();
+  });
+
+  window.addEventListener('resize', function(){
+    if (!renderer) return;
+    camera.aspect = innerWidth/innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    checkOrientation();
+  });
+  window.addEventListener('orientationchange', checkOrientation);
+
+  if (IS_TOUCH) setupTouch();
+}
+
+/* ---- タッチ：左半分=移動スティック / 右半分=視点ドラッグ ---- */
+function setupTouch(){
+  document.body.classList.add('touch');
+  var cv = renderer.domElement;
+
+  function setKnob(x, y){
+    $('stickBase').style.left = mvOx + 'px'; $('stickBase').style.top = mvOy + 'px';
+    $('stickKnob').style.left = x + 'px';    $('stickKnob').style.top = y + 'px';
+  }
+  function showStick(on){
+    $('stickBase').classList.toggle('on', on);
+    $('stickKnob').classList.toggle('on', on);
+  }
+
+  cv.addEventListener('touchstart', function(e){
+    if (state !== 'play') return;
+    e.preventDefault();
+    for (var i=0;i<e.changedTouches.length;i++){
+      var t = e.changedTouches[i];
+      if (t.clientX < innerWidth*0.5 && mvId === null){
+        mvId = t.identifier; mvOx = t.clientX; mvOy = t.clientY;
+        setKnob(t.clientX, t.clientY); showStick(true);
+      } else if (lkId === null){
+        lkId = t.identifier; lkX = t.clientX; lkY = t.clientY;
+      }
+    }
+  }, { passive:false });
+
+  cv.addEventListener('touchmove', function(e){
+    if (state !== 'play') return;
+    e.preventDefault();
+    for (var i=0;i<e.changedTouches.length;i++){
+      var t = e.changedTouches[i];
+      if (t.identifier === mvId){
+        var dx = t.clientX - mvOx, dy = t.clientY - mvOy;
+        var l = Math.hypot(dx, dy);
+        if (l > STICK_R){ dx = dx/l*STICK_R; dy = dy/l*STICK_R; l = STICK_R; }
+        mvX =  dx / STICK_R;
+        mvY = -dy / STICK_R;          // 上方向 = 前進
+        setKnob(mvOx + dx, mvOy + dy);
+      } else if (t.identifier === lkId){
+        yaw   -= (t.clientX - lkX) * 0.0055;
+        pitch -= (t.clientY - lkY) * 0.0050;
+        pitch = Math.max(-1.2, Math.min(1.2, pitch));
+        lkX = t.clientX; lkY = t.clientY;
+      }
+    }
+  }, { passive:false });
+
+  function endTouch(e){
+    for (var i=0;i<e.changedTouches.length;i++){
+      var id = e.changedTouches[i].identifier;
+      if (id === mvId){ mvId = null; mvX = mvY = 0; showStick(false); }
+      if (id === lkId){ lkId = null; }
+    }
+  }
+  cv.addEventListener('touchend', endTouch);
+  cv.addEventListener('touchcancel', endTouch);
+
+  // 「後ろを見る」= 押している間だけ視点が後ろを向く。走る向きは変わらない
+  var tb = $('btnTurn');
+  function backOn(e){ e.preventDefault(); e.stopPropagation(); backBtn = true;  tb.classList.add('held'); }
+  function backOff(e){ if (e) e.preventDefault();              backBtn = false; tb.classList.remove('held'); }
+  tb.addEventListener('touchstart', backOn,  { passive:false });
+  tb.addEventListener('touchend',   backOff, { passive:false });
+  tb.addEventListener('touchcancel',function(){ backOff(); });
+
+  $('btnPause').addEventListener('touchstart', function(e){
+    e.preventDefault(); e.stopPropagation(); pause();
+  }, { passive:false });
+}
+
+function checkOrientation(){
+  if (!IS_TOUCH) return;
+  var portrait = innerHeight > innerWidth;
+  $('rotate').classList.toggle('on', portrait && state === 'play');
+}
+
+function goFullscreen(){
+  var el = document.documentElement;
+  var fn = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (fn) { try { fn.call(el); } catch(e){} }
+}
+
+/* =======================================================================
+   10. ゲーム進行
+   ======================================================================= */
+function flash(text, ms){
+  var m = $('msg'); m.textContent = text; m.classList.add('on');
+  clearTimeout(flash._t);
+  flash._t = setTimeout(function(){ m.classList.remove('on'); }, ms || 1600);
+}
+
+function startGame(){
+  if (!renderer){
+    renderer = new THREE.WebGLRenderer({ antialias:false, powerPreference:'high-performance' });
+    // Retina全解像度は塗るピクセルが4倍になるので上限を設ける（モバイルはさらに低く）
+    renderer.setPixelRatio(Math.min(devicePixelRatio, IS_TOUCH ? 1.2 : 1.5));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+    renderer.domElement.addEventListener('click', function(){
+      if (!IS_TOUCH && state === 'play') renderer.domElement.requestPointerLock();
+    });
+    clock = new THREE.Clock();
+    setupInput();
+    animate();
+  }
+
+  genMaze();
+  buildScene();
+  spawnEntities();
+
+  keysGot = 0; stamina = 1; elapsed = 0;
+  vel.x = vel.z = 0;
+  mvId = lkId = null; mvX = mvY = 0; backBtn = false;
+  t0 = performance.now();
+
+  $('startScreen').classList.add('hidden');
+  $('endScreen').classList.add('hidden');
+  $('pauseScreen').classList.add('hidden');
+  $('hud').classList.add('on');
+  state = 'play';
+  initAudio();
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+
+  if (IS_TOUCH){
+    $('touchUI').classList.add('on');
+    goFullscreen();
+    checkOrientation();
+  } else {
+    renderer.domElement.requestPointerLock();
+  }
+  flash('鍵を ' + KEYS_N + ' 個 集めろ', 2600);
+}
+
+function pause(){
+  if (state !== 'play') return;
+  state = 'pause';
+  mvId = lkId = null; mvX = mvY = 0; backBtn = false;
+  $('stickBase').classList.remove('on'); $('stickKnob').classList.remove('on');
+  $('rotate').classList.remove('on');
+  $('pauseScreen').classList.remove('hidden');
+  if (droneGain) droneGain.gain.value = 0;
+}
+function resume(){
+  if (state !== 'pause') return;
+  $('pauseScreen').classList.add('hidden');
+  state = 'play';
+  if (IS_TOUCH) checkOrientation();
+  else renderer.domElement.requestPointerLock();
+}
+function endGame(win){
+  state = 'end';
+  document.exitPointerLock && document.exitPointerLock();
+  $('hud').classList.remove('on');
+  $('touchUI').classList.remove('on');
+  $('rotate').classList.remove('on');
+  mvId = lkId = null; mvX = mvY = 0; backBtn = false;
+  ['eF','eL','eR','eB'].forEach(function(id){ $(id).style.opacity = 0; });
+  if (droneGain) droneGain.gain.value = 0;
+
+  var tt = $('endTitle'), tb = $('endBody');
+  tt.className = win ? 'good' : 'bad';
+  tt.textContent = win ? 'E S C A P E D' : 'C A U G H T';
+  tb.innerHTML = win
+    ? '脱出タイム <b>' + elapsed.toFixed(1) + ' 秒</b><br>難易度 ' + DIFF[diffIdx].name
+    : '生存時間 <b>' + elapsed.toFixed(1) + ' 秒</b><br>集めた鍵 ' + keysGot + ' / ' + KEYS_N;
+  $('endScreen').classList.remove('hidden');
+  beep(win ? 660 : 90, win ? 0.5 : 1.1, win ? 0.16 : 0.28);
+}
+
+/* =======================================================================
+   11. メインループ
+   ======================================================================= */
+function animate(){
+  requestAnimationFrame(animate);
+  var dt = Math.min(clock.getDelta(), 0.05);
+  if (state === 'play') update(dt);
+  if (renderer && scene && camera) renderer.render(scene, camera);
+}
+
+function update(dt){
+  elapsed = (performance.now() - t0) / 1000;
+
+  /* ---- 視点方向と進行方向を分離する ----
+     「後ろを見る」を押している間、カメラだけが180度回る。走っている向きは変わらない。
+     前を向いたまま背後を確認する、という動作を1ボタンで成立させるため */
+  var lookBack = !!(held['KeyR'] || backBtn);
+  var viewYaw  = yaw + (lookBack ? Math.PI : 0);
+  var vfx = -Math.sin(viewYaw), vfz = -Math.cos(viewYaw);   // 視線の向き
+
+  // ---- プレイヤー移動 ----
+  var fx = -Math.sin(yaw), fz = -Math.cos(yaw);             // 進む向き
+  var rx = -fz, rz = fx;
+  // キーボードとスティックを同じ「前後 / 左右」量に正規化してから合成する
+  var fwd = 0, str = 0;
+  if (held['KeyW'] || held['ArrowUp'])    fwd += 1;
+  if (held['KeyS'] || held['ArrowDown'])  fwd -= 1;
+  if (held['KeyD'] || held['ArrowRight']) str += 1;
+  if (held['KeyA'] || held['ArrowLeft'])  str -= 1;
+  fwd += mvY; str += mvX;
+
+  var il = Math.hypot(fwd, str);
+  if (il > 1){ fwd /= il; str /= il; il = 1; }
+  var mx = fx*fwd + rx*str;
+  var mz = fz*fwd + rz*str;
+  var ml = il;
+
+  // スティックを大きく倒すか Shift でダッシュ。専用ボタンは廃止した
+  // （倒し量に速度が比例するため、半端な倒し方で走ボタンを押すと逆に遅くなり、
+  //   「押しても速くならない」という体感になっていた）
+  var running = (held['ShiftLeft'] || held['ShiftRight'] || il > 0.80)
+                && stamina > 0.02 && ml > 0.05;
+  stamina = Math.max(0, Math.min(1, stamina + (running ? -dt*ST_DRAIN : dt*ST_REGEN)));
+  var spd = running ? RUN : WALK;
+
+  pos.x += mx * spd * dt;
+  pos.z += mz * spd * dt;
+  resolveCollision(pos);
+
+  // 速さは数値では伝わらない。視野角を広げ、揺れを強めて体で分からせる
+  var wantFov = running ? 86 : 74;
+  if (Math.abs(camera.fov - wantFov) > 0.03){
+    camera.fov += (wantFov - camera.fov) * Math.min(1, dt * 7);
+    camera.updateProjectionMatrix();
+  }
+  var bob = ml > 0.05 ? (running ? 0.075 : 0.028) : 0;
+  camera.position.set(pos.x, EYE + Math.sin(elapsed*(running?12:8))*bob, pos.z);
+  camera.rotation.set(pitch, viewYaw, 0, 'YXZ');
+
+  // ---- 距離場（毎フレーム1回。27x27=729セルなので誤差レベル） ----
+  var pg = gridOf(pos.x, pos.z);
+  buildDistanceField(pg.x, pg.z);
+
+  // ---- 顔の行動 ----
+  var nearest = Infinity, behindIntensity = 0;
+  var eL = 0, eR = 0, eB = 0, eF = 0;
+  var ramp = 1 + keysGot * 0.06 + Math.min(elapsed/120, 0.35);   // じわじわ速くなる
+  var D = DIFF[diffIdx];
+  var chasing = 0, newlySpotted = false;
+
+  for (var i=0;i<foes.length;i++){
+    var f = foes[i];
+    var dxp = pos.x - f.x, dzp = pos.z - f.z;
+    var dist = Math.hypot(dxp, dzp);
+    if (dist < nearest) nearest = dist;
+
+    // カメラ前方との角度
+    var ang = 0;
+    if (dist > 0.001){
+      var dot = (dxp/dist)*vfx + (dzp/dist)*vfz;
+      var cross = (dxp/dist)*vfz - (dzp/dist)*vfx;
+      ang = Math.atan2(cross, dot);   // 0=見ている方向, ±PI=その真後ろ
+    }
+    var aa = Math.abs(ang);
+    var los = lineOfSight(pos.x, pos.z, f.x, f.z);
+    var fg = gridOf(f.x, f.z);
+
+    /* ---- 発見判定 ----
+       視線: 見通せる距離まで。フォグの見通しと揃えてあるので
+             「向こうから見えているならこちらからも見えている」
+       足音: 壁を回り込んで届くので、直線距離ではなく通路沿いの距離で測る */
+    var steps    = bfsDist[fg.z*GW + fg.x];
+    var pathDist = steps >= 0 ? steps * CS : Infinity;
+    var seen  = los && dist <= D.sight;
+    var heard = pathDist <= (running ? HEAR_RUN : HEAR_WALK);
+    var detected = f.stalker || seen || heard || dist < NOTICE_R;
+
+    if (detected){
+      if (f.state !== 'chase'){ newlySpotted = true; f.spotFx = 0.45; }
+      f.state = 'chase';
+      f.lose = LOSE_TIME;
+      f.lastSeen = { x: pg.x, z: pg.z };
+    } else if (f.state === 'chase'){
+      f.lose -= dt;
+      if (f.lose <= 0){
+        // 見失った。最後に見た地点まで行ってから徘徊に戻る
+        if (f.lastSeen){
+          f.state = 'search';
+          f.goalCell = { x: f.lastSeen.x, z: f.lastSeen.z };
+          f.field = buildField(f.goalCell.x, f.goalCell.z, f.field);
+        } else pickPatrol(f);
+      }
+    }
+    if (f.state === 'chase') chasing++;
+
+    /* 見つめられている顔は動きが鈍る。凝視型は完全に停止し、追跡型も減速する。
+       挟み撃ちにされたとき、片側を睨みながら後退するという逃げ道になる */
+    var inView  = aa < 0.61 && los;
+    var watched = f.stalker && inView;
+    var gaze    = (!f.stalker && inView) ? GAZE_SLOW : 1;
+    if (!watched){
+      var arrived = !f.target || (Math.abs(f.x-f.target.x) < 0.12 && Math.abs(f.z-f.target.z) < 0.12);
+      if (arrived){
+        var nx = null;
+        if (f.state === 'chase'){
+          nx = stepDownhill(bfsDist, fg.x, fg.z);
+        } else {
+          // 目的地に着いたら次を決める（捜索の終わり＝徘徊へ）
+          if (f.goalCell && fg.x === f.goalCell.x && fg.z === f.goalCell.z) pickPatrol(f);
+          nx = stepDownhill(f.field, fg.x, fg.z);
+          if (!nx){ pickPatrol(f); nx = stepDownhill(f.field, fg.x, fg.z); }
+        }
+        f.target = nx ? cellCenter(nx[0], nx[1]) : null;
+      }
+      if (f.target){
+        var tdx = f.target.x - f.x, tdz = f.target.z - f.z, tl = Math.hypot(tdx,tdz);
+        if (tl > 0.001){
+          var mult = ((f.state === 'chase') ? 1 : PATROL_SP) * gaze;
+          var step = f.speed * ramp * mult * dt;
+          if (step > tl) step = tl;
+          f.x += tdx/tl*step; f.z += tdz/tl*step;
+        }
+      }
+    }
+
+    f.phase += dt * 2.0;
+    f.spr.position.set(f.x, WALL_H/2 + Math.sin(f.phase)*0.05, f.z);
+    // 見つかった瞬間に一瞬だけ膨らませる（気づかれたことを体で分からせる）
+    if (f.spotFx > 0) f.spotFx = Math.max(0, f.spotFx - dt);
+    var s = FACE_W + (watched ? 0.10 : 0) + (f.spotFx || 0) * 0.7;
+    f.spr.scale.set(s, s, 1);
+
+    // ---- 方向警告（見えている顔だけ／背後は視線に関係なく警告） ----
+    var prox = Math.max(0, 1 - (dist - CATCH)/11);
+    if (prox > 0){
+      if (aa > 2.10){                       // 背後
+        eB = Math.max(eB, prox);
+        behindIntensity = Math.max(behindIntensity, prox);
+      } else if (aa < 0.70 && los){         // 正面（見えている）
+        eF = Math.max(eF, prox * 1.1);
+      } else if (ang > 0){                  // 左
+        eL = Math.max(eL, prox);
+      } else {                              // 右
+        eR = Math.max(eR, prox);
+      }
+    }
+
+    if (dist < CATCH){ endGame(false); return; }
+  }
+
+  $('eL').style.opacity = eL.toFixed(3);
+  $('eR').style.opacity = eR.toFixed(3);
+  $('eB').style.opacity = eB.toFixed(3);
+  $('eF').style.opacity = Math.min(1, eF).toFixed(3);
+  $('behindTag').style.opacity = (behindIntensity > 0.34 ? 1 : 0);
+  if (IS_TOUCH) $('stickKnob').classList.toggle('run', running);
+
+  // 見つかった瞬間を必ず知らせる。これがないと仕組みを学習できない
+  if (newlySpotted){
+    beep(150, 0.55, 0.30);
+    beep(96, 0.75, 0.22);
+    flash('見つかった', 1300);
+  }
+
+  // 唸り音は「追われている間」だけ強くする。徘徊中は静かで、緩急がつく
+  if (droneGain){
+    var prox2 = Math.max(0, 1 - (nearest - CATCH)/11);
+    droneGain.gain.value = prox2 * (chasing > 0 ? 0.55 : 0.16);
+  }
+
+  // ---- 鍵 ----
+  for (var k=0;k<keys3d.length;k++){
+    var it = keys3d[k];
+    if (it.taken) continue;
+    it.mesh.rotation.y += dt*2.2;
+    it.mesh.rotation.x += dt*1.1;
+    it.mesh.position.y = 1.0 + Math.sin(elapsed*2.4 + k)*0.13;
+    if (Math.hypot(pos.x-it.mesh.position.x, pos.z-it.mesh.position.z) < 0.8){
+      it.taken = true; scene.remove(it.mesh); keysGot++;
+      beep(880, 0.18, 0.14);
+      flash(keysGot >= KEYS_N ? '全部そろった — 緑の出口へ' : '鍵 ' + keysGot + ' / ' + KEYS_N);
+      if (keysGot >= KEYS_N){
+        exitMesh.material.color.setHex(0x4cd94c);
+        exitMesh.material.opacity = 0.95;
+        if (exitGlow) exitGlow.visible = true;   // 出口が遠くからでも見えるようになる
+      }
+    }
+  }
+
+  // ---- 出口 ----
+  exitMesh.rotation.y += dt*0.5;
+  if (keysGot >= KEYS_N && Math.hypot(pos.x-exitMesh.position.x, pos.z-exitMesh.position.z) < 1.3){
+    endGame(true); return;
+  }
+
+  // ---- HUD ----
+  var bars = '';
+  for (var b=0;b<10;b++) bars += (b < Math.round(stamina*10) ? '▮' : '▯');
+  $('stats').innerHTML =
+    '<span class="big">' + keysGot + ' / ' + KEYS_N + '</span> 鍵<br>' +
+    elapsed.toFixed(1) + ' 秒<br>' +
+    '<span style="font-size:11px;color:' + (running ? '#e9d76a' : '#8d8560') + '">' +
+      (running ? '走行中 ' : 'STAMINA ') + bars + '</span><br>' +
+    '<span style="font-size:11px;color:' + (chasing ? '#e07a6a' : '#8d8560') + '">追跡中 ' +
+      chasing + ' / ' + foes.length + '</span><br>' +
+    '<span style="font-size:11px;color:#8d8560">顔まで ' + Math.max(0, nearest - CATCH).toFixed(1) + ' m</span>';
+}
+
+/* =======================================================================
+   12. メニュー配線
+   ======================================================================= */
+function refreshStart(){
+  var b = $('startBtn');
+  b.disabled = faceTextures.length === 0;
+  b.textContent = faceTextures.length ? '逃げる' : '顔を選んでください';
+}
+
+$('fileIn').addEventListener('change', function(e){
+  var files = Array.prototype.slice.call(e.target.files).slice(0, 12);
+  if (!files.length) return;
+  faceTextures = [];
+  $('thumbs').innerHTML = '';
+  var done = 0;
+  files.forEach(function(file){
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      faceTextures.push(faceTextureFromImage(img));
+      var th = document.createElement('img'); th.src = url;
+      $('thumbs').appendChild(th);
+      if (++done === files.length) refreshStart();
+    };
+    img.onerror = function(){ if (++done === files.length) refreshStart(); };
+    img.src = url;
+  });
+});
+
+$('sampleBtn').addEventListener('click', function(){
+  faceTextures = [];
+  $('thumbs').innerHTML = '';
+  for (var i=0;i<4;i++){
+    var t = sampleFaceTexture(i);
+    faceTextures.push(t);
+    var th = document.createElement('img'); th.src = t.image.toDataURL();
+    $('thumbs').appendChild(th);
+  }
+  refreshStart();
+});
+
+Array.prototype.forEach.call(document.querySelectorAll('#diffOpts .opt'), function(el){
+  el.addEventListener('click', function(){
+    Array.prototype.forEach.call(document.querySelectorAll('#diffOpts .opt'), function(o){ o.classList.remove('on'); });
+    el.classList.add('on');
+    diffIdx = parseInt(el.dataset.d, 10);
+  });
+});
+
+$('startBtn').addEventListener('click', startGame);
+$('againBtn').addEventListener('click', startGame);
+$('resumeBtn').addEventListener('click', resume);
+$('menuBtn').addEventListener('click', function(){
+  $('endScreen').classList.add('hidden');
+  $('startScreen').classList.remove('hidden');
+  state = 'menu';
+});
+$('quitBtn').addEventListener('click', function(){
+  $('pauseScreen').classList.add('hidden');
+  $('hud').classList.remove('on');
+  $('touchUI').classList.remove('on');
+  $('startScreen').classList.remove('hidden');
+  state = 'menu';
+});
+
+// 端末が回転ロックされている人向けに、案内はタップで消せるようにする
+$('rotate').addEventListener('click', function(){ this.classList.remove('on'); checkOrientation = function(){}; });
+
+if (IS_TOUCH){
+  $('keysPC').style.display = 'none';
+  $('keysTouch').style.display = 'grid';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ずっきーLab — 静けさに、ひとつの音を。</title>
+<meta name="description" content="ずっきーLab — 数学・機械学習・ことばを横断する、ひとりの研究の場。風鈴のように、風を受けてふと鳴る仕事を静かに積む。">
+<meta property="og:title" content="ずっきーLab — 静けさに、ひとつの音を。">
+<meta property="og:description" content="数学・機械学習・ことばを横断する、ひとりの研究の場。">
+<meta property="og:type" content="website">
+<style>
+  :root{
+    --bg:#f4f1e8; --paper:#faf8f1; --ink:#332f28; --muted:#7c7669; --faint:#a89f8d;
+    --line:#e3ddce; --line2:#efeadd; --indigo:#566b78;
+    --moss:#6c7358; --chip:#efe9db;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC","Times New Roman",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.95;font-size:16px;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+  a{color:inherit;text-decoration:none}
+  body[data-lang="ja"] .en{display:none}
+  body[data-lang="en"] .ja{display:none}
+  body[data-lang="en"]{font-size:15px;line-height:1.85}
+  .wrap{max-width:940px;margin:0 auto;padding:0 28px}
+
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;background:rgba(244,241,232,.9);
+    backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .nav-in{max-width:940px;margin:0 auto;padding:16px 28px;display:flex;align-items:center;justify-content:space-between}
+  .brand{font-family:var(--serif);font-size:20px;letter-spacing:.06em}
+  .nav-right{display:flex;align-items:center;gap:24px}
+  .nav-links{display:flex;gap:24px;font-size:13px;color:var(--muted);letter-spacing:.14em}
+  .nav-links a:hover{color:var(--ink)}
+  .lang{display:flex;gap:2px;font-size:12px;color:var(--faint);letter-spacing:.1em}
+  .lang button{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:2px 4px}
+  .lang button.on{color:var(--ink);border-bottom:1px solid var(--indigo)}
+  .lang span{color:var(--line)}
+  @media(max-width:620px){.nav-links{display:none}}
+
+  /* hero */
+  header.hero{position:relative;overflow:hidden}
+  .hero-in{display:grid;grid-template-columns:1.35fr .65fr;gap:20px;align-items:center;
+    padding:104px 0 96px;min-height:66vh}
+  .eyebrow{font-size:12px;letter-spacing:.34em;color:var(--indigo);margin-bottom:30px}
+  h1.title{font-family:var(--serif);font-weight:500;font-size:clamp(34px,6vw,60px);
+    line-height:1.5;margin:0 0 30px;letter-spacing:.06em}
+  .lead{font-size:16px;color:#4c473e;max-width:460px;margin:0;line-height:2.1}
+  .chime{justify-self:center;align-self:start;margin-top:10px}
+  @media(max-width:700px){.hero-in{grid-template-columns:1fr;min-height:auto;padding:64px 0 40px}
+    .chime{display:none}}
+
+  /* wind chime */
+  .chime svg{width:130px;height:210px;overflow:visible}
+  .chime .body-line{stroke:var(--ink);stroke-width:1.1;fill:none;opacity:.55}
+  .chime .tanzaku{transform-origin:64px 150px;animation:sway 5.5s ease-in-out infinite}
+  .chime .clapper{transform-origin:64px 128px;animation:sway 5.5s ease-in-out infinite}
+  @keyframes sway{0%,100%{transform:rotate(3.2deg)}50%{transform:rotate(-3.2deg)}}
+  .chime .kanji{font-family:var(--serif);font-size:15px;fill:var(--muted);letter-spacing:.3em}
+
+  /* section */
+  section{padding:78px 0;border-top:1px solid var(--line)}
+  .label{font-size:12px;letter-spacing:.3em;color:var(--indigo);margin-bottom:16px}
+  h2{font-family:var(--serif);font-weight:500;font-size:clamp(23px,3.4vw,30px);
+    margin:0 0 8px;letter-spacing:.08em;line-height:1.5}
+  .sub{color:var(--muted);font-size:13.5px;letter-spacing:.06em;margin:0 0 40px}
+
+  /* ethos */
+  .ethos .big{font-family:var(--serif);font-size:clamp(22px,3.4vw,30px);line-height:1.9;
+    margin:0 0 34px;letter-spacing:.05em;color:#2f2b24;max-width:720px}
+  .ethos p{color:#4c473e;max-width:680px;margin:0 0 26px}
+  .frags{margin-top:44px;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:2px;overflow:hidden}
+  .frag{background:var(--paper);padding:26px 28px}
+  .frag .n{font-family:var(--serif);color:var(--indigo);font-size:13px;letter-spacing:.2em;margin-bottom:10px}
+  .frag p{margin:0;color:#413d34;font-size:15px;line-height:1.9}
+
+  /* works */
+  .work{display:grid;grid-template-columns:150px 1fr auto;gap:28px;align-items:baseline;
+    padding:30px 0;border-bottom:1px solid var(--line)}
+  .work:first-of-type{border-top:1px solid var(--line)}
+  .work .wname{font-family:var(--serif);font-size:21px;letter-spacing:.03em}
+  .work .wname .kind{display:block;font-family:var(--sans);font-size:11px;letter-spacing:.16em;color:var(--indigo);margin-top:8px}
+  .work .wdesc{color:#4c473e;font-size:14.5px;line-height:1.9;max-width:520px}
+  .work .wdesc .tags{margin-top:12px;display:flex;flex-wrap:wrap;gap:7px}
+  .chip{font-size:11px;letter-spacing:.05em;color:#6a655c;background:var(--chip);border-radius:2px;padding:3px 9px}
+  .work .wact{white-space:nowrap;text-align:right}
+  .demo-link{font-size:13px;color:var(--indigo);letter-spacing:.04em;border-bottom:1px solid var(--line);padding-bottom:2px}
+  .demo-link:hover{border-color:var(--indigo)}
+  .demo-soon{font-size:12px;color:var(--faint);letter-spacing:.1em}
+  .work .sub2{display:block;font-size:12px;color:var(--faint);margin-top:8px}
+  @media(max-width:700px){.work{grid-template-columns:1fr;gap:12px}.work .wact{text-align:left}}
+
+  /* kotoba (note) */
+  .kotoba-head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;margin-bottom:34px}
+  .note-btn{font-size:13px;letter-spacing:.1em;color:var(--indigo);border:1px solid var(--line);
+    border-radius:2px;padding:9px 18px}
+  .note-btn:hover{border-color:var(--indigo);background:var(--paper)}
+  .writing{display:block;padding:24px 0;border-top:1px solid var(--line);display:grid;
+    grid-template-columns:1fr auto;gap:20px;align-items:baseline;transition:.15s}
+  .writing:last-child{border-bottom:1px solid var(--line)}
+  .writing:hover{padding-left:8px}
+  .writing h3{font-family:var(--serif);font-weight:500;font-size:18px;margin:0 0 8px;letter-spacing:.03em;line-height:1.6}
+  .writing p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.8;max-width:600px}
+  .writing .meta{font-size:12px;color:var(--faint);letter-spacing:.08em;white-space:nowrap}
+
+  /* footer */
+  footer{border-top:1px solid var(--line);padding:60px 0 80px;text-align:center}
+  .foot-mark{font-family:var(--serif);font-size:19px;letter-spacing:.12em;color:var(--ink)}
+  .foot-line{color:var(--faint);font-size:12.5px;letter-spacing:.14em;margin-top:18px}
+  .foot-links{display:flex;gap:22px;justify-content:center;margin-top:22px;font-size:13px;color:var(--muted);letter-spacing:.08em}
+  .foot-links a:hover{color:var(--ink)}
+  .rule{width:34px;height:1px;background:var(--faint);margin:0 auto 26px;opacity:.6}
+</style>
+</head>
+<body data-lang="ja">
+
+<nav>
+  <div class="nav-in">
+    <a class="brand" href="#top">ずっきーLab</a>
+    <div class="nav-right">
+      <div class="nav-links">
+        <a href="#ethos"><span class="ja">風土</span><span class="en">Ethos</span></a>
+        <a href="#works"><span class="ja">しごと</span><span class="en">Works</span></a>
+        <a href="#kotoba"><span class="ja">ことば</span><span class="en">Words</span></a>
+        <a href="https://github.com/ytszkyuta-max" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <div class="lang">
+        <button id="btn-ja" class="on" onclick="setLang('ja')">日</button><span>/</span><button id="btn-en" onclick="setLang('en')">EN</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-in">
+    <div>
+      <h1 class="title">
+        <span class="ja">静けさに、<br>ひとつの音を。</span>
+        <span class="en">One clear note,<br>in the stillness.</span>
+      </h1>
+      <p class="lead">
+        <span class="ja">ずっきーLabは、数学・機械学習・ことばを横断する、ひとりの研究の場です。風鈴のように、風を受けてふと鳴る——そんな仕事を、静かに積んでいます。</span>
+        <span class="en">Zukkii Lab is an independent studio moving across mathematics, machine learning and language. Like a wind chime that catches the breeze and, for an instant, rings — the work is gathered quietly, one note at a time.</span>
+      </p>
+    </div>
+    <div class="chime" aria-hidden="true">
+      <svg viewBox="0 0 128 210">
+        <path class="body-line" d="M40 22 h48"/>
+        <path class="body-line" d="M64 22 v18"/>
+        <path class="body-line" d="M42 44 q22 -10 44 0 q4 30 -22 34 q-26 -4 -22 -34 z"/>
+        <g class="clapper">
+          <path class="body-line" d="M64 78 v34"/>
+          <circle class="body-line" cx="64" cy="120" r="8"/>
+        </g>
+        <g class="tanzaku">
+          <path class="body-line" d="M64 128 v16"/>
+          <path class="body-line" d="M54 146 h20 v54 h-20 z"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+</header>
+
+<section id="ethos" class="ethos">
+  <div class="wrap">
+    <div class="label"><span class="ja">風土</span><span class="en">Ethos</span></div>
+    <h2><span class="ja">静けさの中の、ひとつの音。</span><span class="en">A single clear tone in the stillness.</span></h2>
+    <p class="big">
+      <span class="ja">風鈴の音のように、一瞬一瞬の移ろいを大切にしています。二度と同じでない「いま」を、こぼさずに掬うこと。そして、その移ろいを突き詰めることを信条にしています。</span>
+      <span class="en">Like the sound of a wind chime, I cherish the transience of each passing moment — catching the “now” that is never the same twice. And I make it my creed to pursue that transience to its depth.</span>
+    </p>
+    <p>
+      <span class="ja">引き算、余白、そして不完全さ——侘寂の感覚を、そのまま仕事の進め方に置いています。全部を言い切らない。作りこみすぎない。けれど、掬い上げた一点は、深いところまで潜っていく。数学の抽象も、機械学習のモデルも、ことばも、その姿勢は変わりません。</span>
+      <span class="en">Subtraction, empty space, imperfection — the sense of wabi-sabi runs straight into how the work is made. Don't say everything. Don't over-build. But the single point once caught, I dive into it as deep as it goes. Abstract mathematics, machine-learning models, and writing — the stance is the same.</span>
+    </p>
+    <div class="frags">
+      <div class="frag">
+        <div class="n">一</div>
+        <p><span class="ja">好奇心から始める。素朴な問いを、理論と実装の両輪で、形になるまで追いかける。</span><span class="en">Begin from curiosity. Take a plain question and, with both theory and implementation, carry it until it takes form.</span></p>
+      </div>
+      <div class="frag">
+        <div class="n">二</div>
+        <p><span class="ja">一瞬の移ろいを大切にする。風鈴の音のように、通り過ぎてゆく今を掬う。</span><span class="en">Cherish the transience of the moment. Like a wind chime's sound, scoop up the now as it passes.</span></p>
+      </div>
+      <div class="frag">
+        <div class="n">三</div>
+        <p><span class="ja">そして、突き詰める。浅く広くではなく、掬った一点を深く。</span><span class="en">And then, pursue it. Not wide and shallow, but the one point caught, taken deep.</span></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="works" class="works">
+  <div class="wrap">
+    <div class="label"><span class="ja">しごと</span><span class="en">Works</span></div>
+    <h2><span class="ja">つくったもの、育てているもの</span><span class="en">Things made, things still growing</span></h2>
+    <p class="sub"><span class="ja">問いから始まり、数や動くものに変わっていった仕事。ひとつずつ、触れて分かる形にしています。</span><span class="en">Work that began as a question and turned into numbers or something that runs — each being shaped into a form you can touch and understand.</span></p>
+
+    <div class="work">
+      <div class="wname">Tokyo Rail Paths<span class="kind"><span class="ja">組合せ・数え上げ</span><span class="en">Combinatorics</span></span></div>
+      <div class="wdesc">
+        <span class="ja">「東京駅から新宿駅まで、同じ駅を二度通らない行き方は何通り?」——23区の鉄道だけで約8×10³¹通り(八千穣)。#P完全という難問を、ZDDの厳密計算とGFlowNet(AI)の推定で数え、地図の上で動かして見せる。</span>
+        <span class="en">“From Tokyo to Shinjuku without repeating a station — how many ways?” Roughly 8×10³¹ across the 23 wards. A #P-complete problem, counted with exact ZDD and a GFlowNet estimator, shown moving on a map.</span>
+        <div class="tags"><span class="chip">#P-complete</span><span class="chip">ZDD</span><span class="chip">GFlowNet</span></div>
+      </div>
+      <div class="wact">
+        <a class="demo-link" href="https://ytszkyuta-max.github.io/tokyo-rail-paths/" target="_blank" rel="noopener"><span class="ja">デモを開く →</span><span class="en">Open demo →</span></a>
+        <span class="sub2"><a href="https://github.com/ytszkyuta-max/tokyo-rail-paths" target="_blank" rel="noopener" style="color:var(--faint)">GitHub</a></span>
+      </div>
+    </div>
+
+    <div class="work">
+      <div class="wname">geom-ml<span class="kind"><span class="ja">理論研究</span><span class="en">Research</span></span></div>
+      <div class="wdesc">
+        <span class="ja">幾何学的深層学習。群論・微分幾何・ゲージ理論を機械学習に接続し、球面CNNからゲージ同変CNNを経て、気候データ(ERA5)への応用を探る。</span>
+        <span class="en">Geometric deep learning — connecting group theory, differential geometry and gauge theory to ML (spherical & gauge-equivariant CNNs), toward climate data (ERA5).</span>
+        <div class="tags"><span class="chip"><span class="ja">幾何</span><span class="en">Geometry</span></span><span class="chip"><span class="ja">同変性</span><span class="en">Equivariance</span></span></div>
+      </div>
+      <div class="wact"><a class="demo-link" href="demos/geom-ml/"><span class="ja">デモを開く →</span><span class="en">Open demo →</span></a></div>
+    </div>
+
+    <div class="work">
+      <div class="wname">mlb_pred<span class="kind"><span class="ja">機械学習</span><span class="en">Machine learning</span></span></div>
+      <div class="wdesc">
+        <span class="ja">MLBの次球種予測AI。投球前の状況だけからTFT + XGBoost/CatBoostのアンサンブルで8球種を予測。精度46.0%(同年)/43.6%(異年)、一様ランダムの約3.5倍。</span>
+        <span class="en">Predicts the next MLB pitch type from pre-pitch state only. A TFT + XGBoost/CatBoost ensemble over 8 classes: 46.0% within-year / 43.6% cross-year, ~3.5× a uniform baseline.</span>
+        <div class="tags"><span class="chip">TFT</span><span class="chip">Ensemble</span><span class="chip">Statcast</span></div>
+      </div>
+      <div class="wact"><a class="demo-link" href="demos/mlb-pred/"><span class="ja">デモを開く →</span><span class="en">Open demo →</span></a></div>
+    </div>
+
+    <div class="work">
+      <div class="wname">comedy-τ<span class="kind"><span class="ja">概念実証</span><span class="en">Proof of concept</span></span></div>
+      <div class="wdesc">
+        <span class="ja">「伏線回収長 τ」で笑いの芸風を1次元パラメータ化する試み。τを制御すれば、実在の芸人を模倣せずに多様な芸風の骨格を生成でき、著作権問題を構造的に回避できる。</span>
+        <span class="en">Treats “setup-to-payoff length τ” as a 1-D parameter for comedic style. Tuning τ generates diverse styles without imitating real performers — sidestepping copyright by design.</span>
+        <div class="tags"><span class="chip">NLP</span><span class="chip"><span class="ja">生成</span><span class="en">Generation</span></span></div>
+      </div>
+      <div class="wact"><a class="demo-link" href="demos/comedy-tau/"><span class="ja">デモを開く →</span><span class="en">Open demo →</span></a></div>
+    </div>
+
+    <div class="work">
+      <div class="wname">sense-of-wonder<span class="kind"><span class="ja">哲学 × 認知</span><span class="en">Philosophy × cognition</span></span></div>
+      <div class="wdesc">
+        <span class="ja">自然の中で生じる「言語化できない共鳴」の言語化とモデル化。カーソン『The Sense of Wonder』を起点に、事例の集積から「受容状態 × 随伴的応答 × 未解決の謎」の3条件モデルを立てる。</span>
+        <span class="en">Modeling the “wordless resonance” felt in nature. From Carson’s <i>The Sense of Wonder</i>, a model built from episodes: receptivity × contingent response × unresolved mystery.</span>
+        <div class="tags"><span class="chip"><span class="ja">認知</span><span class="en">Cognition</span></span><span class="chip"><span class="ja">現象学</span><span class="en">Phenomenology</span></span></div>
+      </div>
+      <div class="wact"><a class="demo-link" href="demos/sense-of-wonder/"><span class="ja">フィールドノートを読む →</span><span class="en">Read the field note →</span></a></div>
+    </div>
+
+    <div class="work">
+      <div class="wname">FACE CHASE<span class="kind"><span class="ja">ゲーム / Three.js</span><span class="en">Game / Three.js</span></span></div>
+      <div class="wdesc">
+        <span class="ja">選んだ顔が、黄ばんだ迷路の向こうから追ってくる——バックルーム風の3D鬼ごっこ。鍵を5つ集めて脱出する。近づかれるほど唸り音が大きくなる。顔画像はブラウザの中だけで処理され、どこにも送られません。</span>
+        <span class="en">A backrooms-style 3D chase: the face you pick hunts you through a yellowed maze — collect 5 keys to escape. Your image is processed only in the browser, never uploaded.</span>
+        <div class="tags"><span class="chip">Three.js</span><span class="chip">WebGL</span><span class="chip"><span class="ja">端末内処理</span><span class="en">On-device</span></span></div>
+      </div>
+      <div class="wact"><a class="demo-link" href="demos/face-chase/"><span class="ja">遊ぶ →</span><span class="en">Play →</span></a></div>
+    </div>
+
+  </div>
+</section>
+
+<section id="kotoba" class="kotoba">
+  <div class="wrap">
+    <div class="kotoba-head">
+      <div>
+        <div class="label"><span class="ja">ことば</span><span class="en">Words</span></div>
+        <h2><span class="ja">考えていること</span><span class="en">What I'm thinking about</span></h2>
+        <p class="sub" style="margin-bottom:0"><span class="ja">数や式になるものもあれば、それ以上は言葉にできないものもある。考えていることを、noteに書いています。</span><span class="en">Some of it becomes numbers or equations; some of it can't be put into words at all. Either way, what I'm thinking is written on note.</span></p>
+      </div>
+      <a class="note-btn" id="note-profile" href="https://note.com/yuta_profile" target="_blank" rel="noopener"><span class="ja">noteで読む →</span><span class="en">Read on note →</span></a>
+    </div>
+
+    <a class="writing" data-note href="https://note.com/yuta_profile" target="_blank" rel="noopener">
+      <div>
+        <h3><span class="ja">自分探しは彫るもの</span><span class="en">The self isn't found — it's carved</span></h3>
+        <p><span class="ja">「探す」より「彫る」。自分は見つけるものではなく、削り出していくものだという見方。</span><span class="en">Less “searching,” more “carving.” The self as something you cut away toward, not something you discover.</span></p>
+      </div>
+      <span class="meta">note</span>
+    </a>
+
+    <a class="writing" data-note href="https://note.com/yuta_profile" target="_blank" rel="noopener">
+      <div>
+        <h3><span class="ja">格子ゲージ理論の曲率が、ニューラルネットの汎化を決める</span><span class="en">Curvature from lattice gauge theory shapes how a network generalizes</span></h3>
+        <p><span class="ja">物理の言葉(曲率・ゲージ)で、機械学習の「なぜ汎化するのか」を見に行った開発記録。</span><span class="en">Using the language of physics (curvature, gauge) to look at why machine-learning models generalize.</span></p>
+      </div>
+      <span class="meta">note</span>
+    </a>
+
+    <a class="writing" data-note href="https://note.com/yuta_profile" target="_blank" rel="noopener">
+      <div>
+        <h3><span class="ja">Apple Watchに7年間監視された結果、自分の取扱説明書ができた</span><span class="en">Seven years watched by an Apple Watch — a user manual for myself</span></h3>
+        <p><span class="ja">7年分の自己計測データを、相関≠因果の留保つきで読み解く。n=1の身体の癖の話。</span><span class="en">Reading seven years of self-tracking data, holding correlation apart from cause — the quirks of an n=1 body.</span></p>
+      </div>
+      <span class="meta">note</span>
+    </a>
+
+    <a class="writing" data-note href="https://note.com/yuta_profile" target="_blank" rel="noopener">
+      <div>
+        <h3><span class="ja">笑いを科学する</span><span class="en">The science of laughter</span></h3>
+        <p><span class="ja">「伏線から回収までの距離」で芸風を測れるか。comedy-τの発想のもとになった問い。</span><span class="en">Can comedic style be measured by the distance from setup to payoff? The question behind comedy-τ.</span></p>
+      </div>
+      <span class="meta">note</span>
+    </a>
+
+    <a class="writing" data-note href="https://note.com/yuta_profile" target="_blank" rel="noopener">
+      <div>
+        <h3><span class="ja">武士道を読む — 知行合一</span><span class="en">Reading Bushidō — the unity of knowing and doing</span></h3>
+        <p><span class="ja">古典を一緒に精読しながら、「知っていること」と「できること」の距離について考える。</span><span class="en">Reading a classic closely, thinking about the distance between what one knows and what one can do.</span></p>
+      </div>
+      <span class="meta">note</span>
+    </a>
+
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="rule"></div>
+    <div class="foot-mark">ずっきーLab</div>
+    <div class="foot-line"><span class="ja">風を受けて、ふと鳴る。</span><span class="en">Catching the breeze, it rings.</span></div>
+    <div class="foot-links">
+      <a href="#ethos"><span class="ja">風土</span><span class="en">Ethos</span></a>
+      <a href="#works"><span class="ja">しごと</span><span class="en">Works</span></a>
+      <a href="#kotoba"><span class="ja">ことば</span><span class="en">Words</span></a>
+      <a href="https://github.com/ytszkyuta-max" target="_blank" rel="noopener">GitHub</a>
+    </div>
+    <div class="foot-line" style="margin-top:24px">© 2026 ずっきーLab</div>
+  </div>
+</footer>
+
+<script>
+  function setLang(l){
+    document.body.dataset.lang=l;document.documentElement.lang=l;
+    document.getElementById('btn-ja').classList.toggle('on',l==='ja');
+    document.getElementById('btn-en').classList.toggle('on',l==='en');
+    try{localStorage.setItem('rin-lang',l)}catch(e){}
+  }
+  (function(){
+    var s;try{s=localStorage.getItem('rin-lang')}catch(e){}
+    if(!s){s=(navigator.language||'ja').toLowerCase().indexOf('ja')===0?'ja':'en';}
+    setLang(s);
+  })();
+  // 記事個別URLが分かれば、各 data-note の href を記事URLに差し替える
+  var NOTE_PROFILE="https://note.com/yuta_profile";
+  document.getElementById('note-profile').href=NOTE_PROFILE;
+</script>
+</body>
+</html>

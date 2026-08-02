@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>フィールドノート — sense-of-wonder / ずっきーLab</title>
+<meta name="description" content="自然の中でふいに訪れる"言葉にならない共鳴"を、訪れた場所ごとに書き留めるフィールドノート。sense-of-wonder プロジェクトの現場の記録。">
+<style>
+  :root{
+    --bg:#f4f1e8; --paper:#faf8f1; --ink:#332f28; --muted:#7c7669; --faint:#a89f8d;
+    --line:#e3ddce; --indigo:#566b78;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.95;font-size:16px;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:720px;margin:0 auto;padding:0 26px}
+  .top{padding:26px 0 0}
+  .back{font-size:13px;color:var(--muted);letter-spacing:.12em}
+  .back:hover{color:var(--ink)}
+  header{padding:40px 0 8px}
+  .label{font-size:12px;letter-spacing:.3em;color:var(--indigo);margin-bottom:14px}
+  h1{font-family:var(--serif);font-weight:500;font-size:clamp(28px,5vw,40px);letter-spacing:.06em;margin:0 0 18px;line-height:1.5}
+  .lead{color:#4c473e;max-width:600px;margin:0;font-family:var(--serif);font-size:16px;line-height:2.05}
+
+  .list{margin:44px 0 0;border-top:1px solid var(--line)}
+  .entry{display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center;
+    padding:26px 0;border-bottom:1px solid var(--line);transition:.15s}
+  .entry:hover{padding-left:6px}
+  .entry .thumb{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:3px;display:block}
+  .entry .meta{font-size:12px;color:var(--faint);letter-spacing:.1em;margin-bottom:8px}
+  .entry .meta .place{color:var(--indigo)}
+  .entry h2{font-family:var(--serif);font-weight:500;font-size:21px;letter-spacing:.03em;margin:0 0 8px;line-height:1.5}
+  .entry p{margin:0;color:var(--muted);font-size:13.5px;line-height:1.85}
+  @media(max-width:560px){.entry{grid-template-columns:1fr;gap:12px}}
+
+  .soon{color:var(--faint);font-size:13px;letter-spacing:.06em;margin-top:30px;font-family:var(--serif)}
+  footer{text-align:center;padding:56px 0 70px;color:var(--faint);font-size:12.5px;letter-spacing:.14em}
+  footer a{color:var(--muted)}
+  footer .mark{font-family:var(--serif);font-size:18px;letter-spacing:.1em;color:var(--ink);display:block;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<div class="wrap top"><a class="back" href="../../">← ずっきーLab</a></div>
+
+<div class="wrap">
+  <header>
+    <div class="label">sense-of-wonder ・ フィールドノート</div>
+    <h1>フィールドノート</h1>
+    <p class="lead">
+      自然の中でふいに訪れる“言葉にならない共鳴”を、訪れた場所ごとに書き留めています。レイチェル・カーソン『The Sense of Wonder』を起点に、事例(エピソード)を積み重ねて、その輪郭を描いていく試み——その、現場の記録です。
+    </p>
+  </header>
+
+  <div class="list">
+
+    <a class="entry" href="notes/2026-08-01-miura-aburatsubo/">
+      <img class="thumb" src="notes/2026-08-01-miura-aburatsubo/img/golden.png" alt="夕方の海">
+      <div>
+        <div class="meta"><span class="place">三浦半島・油壺</span> ・ 2026.8.1</div>
+        <h2>海岸を、ただ歩いた。</h2>
+        <p>ウニの棘、フナムシの群れ、入江の静けさ、丘からの海、変わらない水平線。言葉にならない“包まれる感覚”の記録。</p>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="soon">次の場所の記録は、また歩いたときに。</div>
+</div>
+
+<footer>
+  <span class="mark">ずっきーLab</span>
+  <a href="../../">ずっきーLab へ戻る</a> ・ <a href="https://github.com/ytszkyuta-max" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+</body>
+</html>
