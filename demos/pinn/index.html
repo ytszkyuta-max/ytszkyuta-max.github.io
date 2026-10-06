@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PINN — 方程式そのものを、損失関数にする</title>
+<meta name="description" content="答えを一つも見せずに、ニューラルネットに微分方程式を解かせる。物理知ニューラルネット(PINN)がこのページの中で学習する。減衰振動の順問題、係数を当てる逆問題、AdS時空の弦の「動く境界」まで。">
+<meta property="og:title" content="PINN — 方程式そのものを、損失関数にする">
+<meta property="og:description" content="答えを見せずに、ニューラルネットに微分方程式を解かせる。ブラウザの中で学習するPINN。">
+<meta property="og:type" content="article">
+<style>
+  :root{
+    --bg:#f4f1e8; --paper:#faf8f1; --ink:#332f28; --muted:#7c7669; --faint:#a89f8d;
+    --line:#e3ddce; --indigo:#566b78; --moss:#6c7358; --amber:#b98a3e; --rust:#a65f45;
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Songti SC",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.95;font-size:16px;-webkit-font-smoothing:antialiased;letter-spacing:.01em}
+  a{color:inherit}
+  .wrap{max-width:760px;margin:0 auto;padding:0 26px}
+  @media(max-width:480px){.wrap{padding:0 16px}}
+  .top{padding-top:26px}
+  .back{font-size:13px;color:var(--muted);letter-spacing:.12em}
+  .back:hover{color:var(--ink)}
+  header{padding:34px 0 4px}
+  .label{font-size:12px;letter-spacing:.3em;color:var(--indigo);margin-bottom:14px}
+  h1{font-family:var(--serif);font-weight:500;font-size:clamp(26px,5vw,36px);letter-spacing:.05em;margin:0 0 18px;line-height:1.6}
+  .intro{color:#4c473e;max-width:640px;margin:0}
+  .intro .en{display:block;color:var(--faint);font-size:13px;letter-spacing:.02em;margin-top:8px}
+  .eq{font-family:"Times New Roman",var(--serif);font-style:italic;letter-spacing:.02em;white-space:nowrap}
+
+  .panel{background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:24px;margin:36px 0}
+  @media(max-width:480px){.panel{padding:18px 14px}}
+  .ptitle{font-family:var(--serif);font-size:18px;letter-spacing:.05em;margin:0 0 4px}
+  .pdesc{font-size:13px;color:#5a554c;margin:0 0 16px;line-height:1.85}
+  .pdesc .eq{color:var(--indigo)}
+  .tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px}
+  .tabs button{font:inherit;font-size:13px;color:var(--muted);background:var(--bg);border:1px solid var(--line);
+    border-radius:2px;padding:7px 13px;cursor:pointer;letter-spacing:.03em;font-family:var(--serif)}
+  .tabs button:hover{border-color:var(--indigo)}
+  .tabs button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+
+  .stage{display:grid;grid-template-columns:1fr 210px;gap:24px;align-items:start;margin-top:14px}
+  @media(max-width:640px){.stage{grid-template-columns:1fr}}
+  canvas.plot{width:100%;height:auto;display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:11.5px;color:var(--muted);letter-spacing:.04em;margin-top:6px}
+  .legend i{display:inline-block;width:16px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
+  .legend i.dot{width:7px;height:7px;border:0;border-radius:50%;background:var(--amber)}
+
+  .readout .row{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding:6px 0;font-size:12.5px;color:var(--muted)}
+  .readout .row b{font-family:var(--serif);font-weight:500;font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .readout canvas{width:100%;height:56px;display:block;margin-top:10px}
+  .readout .cap{font-size:11px;color:var(--faint);letter-spacing:.08em;text-align:right}
+  .sl{margin:12px 0 0}
+  .sl label{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)}
+  .sl label b{font-family:var(--serif);font-weight:500;color:var(--ink)}
+  .sl input{width:100%;accent-color:var(--indigo)}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+  .btns button{font:inherit;font-size:12.5px;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+    border-radius:2px;padding:8px 13px;cursor:pointer;letter-spacing:.04em}
+  .btns button:hover{border-color:var(--indigo)}
+  .btns button.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .btns button.primary:hover{background:var(--indigo);border-color:var(--indigo)}
+
+  .coef .row{display:grid;grid-template-columns:28px 1fr auto;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid var(--line)}
+  .coef .sym{font-family:"Times New Roman",var(--serif);font-style:italic;font-size:17px;color:var(--ink)}
+  .coef .track{position:relative;height:6px;background:#ece5d5;border-radius:6px}
+  .coef .fill{position:absolute;left:0;top:0;bottom:0;background:var(--indigo);opacity:.6;border-radius:6px;width:0}
+  .coef .tgt{position:absolute;top:-4px;width:2px;height:14px;background:var(--rust)}
+  .coef .val{font-family:var(--serif);font-size:15px;font-variant-numeric:tabular-nums;min-width:96px;text-align:right}
+  .coef .val small{color:var(--faint);font-family:var(--sans);font-size:11px;margin-left:4px}
+
+  .punch{text-align:center;font-family:var(--serif);font-size:15px;color:#2f2b24;letter-spacing:.04em;
+    border-top:1px solid var(--line);margin-top:22px;padding-top:20px;min-height:3.2em}
+  .punch b{color:var(--indigo)}
+
+  section.prose h2{font-family:var(--serif);font-weight:500;font-size:21px;letter-spacing:.06em;margin:48px 0 12px}
+  section.prose p{color:#4c473e;font-size:15px;max-width:660px}
+  .formula{font-family:"Times New Roman",var(--serif);font-style:italic;font-size:17px;text-align:center;
+    background:var(--paper);border:1px solid var(--line);border-radius:3px;padding:16px 12px;margin:18px 0;overflow-x:auto;white-space:nowrap}
+  .formula small{display:block;font-family:var(--sans);font-style:normal;font-size:11.5px;color:var(--faint);letter-spacing:.06em;margin-top:6px;white-space:normal}
+  figure{margin:22px 0}
+  figure img{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:3px;background:#fff}
+  figcaption{font-size:12px;color:var(--faint);letter-spacing:.04em;margin-top:8px;line-height:1.8}
+  table.cmp{border-collapse:collapse;margin:14px 0 4px;font-size:13.5px}
+  table.cmp th,table.cmp td{border-bottom:1px solid var(--line);padding:8px 16px 8px 0;text-align:left;color:#4c473e}
+  table.cmp th{color:var(--muted);font-weight:400;letter-spacing:.06em;font-size:12px}
+  table.cmp td.tot{font-family:var(--serif);color:var(--indigo)}
+  .note{color:var(--faint);font-size:12.5px;line-height:1.85;border-top:1px solid var(--line);margin-top:40px;padding-top:22px;max-width:660px}
+  .note p{margin:0 0 10px}
+  footer{text-align:center;padding:54px 0 70px;color:var(--faint);font-size:12.5px;letter-spacing:.14em}
+  footer a{color:var(--muted)}
+  footer .mark{font-family:var(--serif);font-size:18px;letter-spacing:.1em;color:var(--ink);display:block;margin-bottom:10px}
+</style>
+</head>
+<body>
+
+<div class="wrap top"><a class="back" href="../../">← ずっきーLab</a></div>
+
+<div class="wrap">
+  <header>
+    <div class="label">PINN · <span style="letter-spacing:.12em">物理 × 機械学習</span></div>
+    <h1>方程式そのものを、<br>損失関数にする。</h1>
+    <p class="intro">
+      ニューラルネットに<b>答えを一つも見せずに</b>、微分方程式を解かせる。やることは、運動方程式からの“ずれ”（残差）を損失にして、小さくしていくだけです。物理知ニューラルネット——<b>PINN</b>。下の小さなネットは、いまこのページの中で学習しています。
+      <span class="en">Physics-informed neural networks: no answers shown, only the equation itself used as the loss. The small networks below train live, inside this page.</span>
+    </p>
+  </header>
+
+  <!-- ===== 1. forward problem ===== -->
+  <div class="panel" id="fwd">
+    <div class="ptitle">一　順問題 —— 方程式から、解を求める</div>
+    <p class="pdesc">減衰振動 <span class="eq">ẍ + h ẋ + ω² x = 0</span>、<span class="eq">x(0) = 1, ẋ(0) = 0</span>。ネット <span class="eq">x<sub>θ</sub>(t)</span> は正解の曲線を一度も見ていません。見ているのは、64個の時刻で測った残差だけです。</p>
+    <div class="tabs" id="fwd-mode">
+      <button data-m="ff" class="on">フーリエ特徴あり</button>
+      <button data-m="plain">なし（素の tanh）</button>
+    </div>
+    <div class="stage">
+      <div>
+        <canvas class="plot" id="fwd-plot" width="520" height="300"></canvas>
+        <div class="legend"><span><i style="border-color:var(--faint)"></i>厳密解</span><span><i style="border-color:var(--indigo)"></i>PINN <span class="eq">x<sub>θ</sub>(t)</span></span></div>
+      </div>
+      <div>
+        <div class="readout">
+          <div class="row">学習ステップ<b id="fwd-ep">0</b></div>
+          <div class="row">損失（残差²）<b id="fwd-loss">—</b></div>
+          <div class="row">厳密解とのずれ<b id="fwd-rmse">—</b></div>
+          <canvas id="fwd-hist" width="210" height="56"></canvas>
+          <div class="cap">loss（対数）</div>
+        </div>
+        <div class="sl"><label>減衰 h <b id="h-v">0.50</b></label><input type="range" id="h-in" min="0.2" max="1" step="0.05" value="0.5"></div>
+        <div class="sl"><label>振動数 ω <b id="w-v">3.0</b></label><input type="range" id="w-in" min="1" max="3.5" step="0.1" value="3"></div>
+        <div class="btns"><button class="primary" id="fwd-go">止める</button><button id="fwd-reset">やりなおす</button></div>
+      </div>
+    </div>
+    <div class="punch" id="fwd-punch"></div>
+  </div>
+
+  <!-- ===== 2. inverse problem ===== -->
+  <div class="panel" id="inv">
+    <div class="ptitle">二　逆問題 —— データから、法則を当てる</div>
+    <p class="pdesc"><span class="eq">ẍ + h ẋ + ω² x − λ x³ = 0</span> の係数 <span class="eq">h, ω², λ</span> を<b>知らないふり</b>をします。手がかりは、ノイズの乗った40個の観測点だけ。係数も学習パラメータにして、ネットと一緒に動かします。</p>
+    <div class="stage">
+      <div>
+        <canvas class="plot" id="inv-plot" width="520" height="300"></canvas>
+        <div class="legend"><span><i class="dot"></i>観測データ（ノイズ入り）</span><span><i style="border-color:var(--indigo)"></i>PINN <span class="eq">x<sub>θ</sub>(t)</span></span></div>
+      </div>
+      <div>
+        <div class="readout">
+          <div class="row">学習ステップ<b id="inv-ep">0</b></div>
+        </div>
+        <div class="coef">
+          <div class="row"><span class="sym">h</span><div class="track"><div class="fill" id="c0"></div><div class="tgt" id="t0"></div></div><span class="val" id="v0">—</span></div>
+          <div class="row"><span class="sym">ω²</span><div class="track"><div class="fill" id="c1"></div><div class="tgt" id="t1"></div></div><span class="val" id="v1">—</span></div>
+          <div class="row"><span class="sym">λ</span><div class="track"><div class="fill" id="c2"></div><div class="tgt" id="t2"></div></div><span class="val" id="v2">—</span></div>
+        </div>
+        <div class="legend" style="margin-top:8px"><span><i style="border-color:var(--rust);width:2px;height:10px;border-top:0;border-left:2px solid var(--rust)"></i>真の値（0.3 / 4 / 1）</span></div>
+        <div class="btns"><button class="primary" id="inv-go">学習する</button><button id="inv-new">別のデータで</button></div>
+      </div>
+    </div>
+    <div class="punch" id="inv-punch">観測点は40個だけ。<b>方程式の形</b>を知っていれば、そこから法則の係数まで決められます。</div>
+  </div>
+
+  <section class="prose">
+    <h2>しくみ：残差を、損失に</h2>
+    <p>ネットの出力 <span class="eq">x<sub>θ</sub>(t)</span> を「解の候補」とみなし、自動微分で <span class="eq">ẋ<sub>θ</sub>, ẍ<sub>θ</sub></span> を取って方程式に代入します。正しい解なら残差はゼロ。だから残差の二乗を損失にして、初期条件のずれを罰則として足すだけで、学習が「方程式を解く」ことになります。</p>
+    <div class="formula">
+      E(θ) = ⟨ [ ẍ<sub>θ</sub> + h ẋ<sub>θ</sub> + ω² x<sub>θ</sub> ]² ⟩<sub>t</sub> + μ [ (x<sub>θ</sub>(0) − 1)² + ẋ<sub>θ</sub>(0)² ]
+      <small>第1項＝方程式の残差（ランダムに選んだ時刻で平均）、第2項＝初期条件の罰則</small>
+    </div>
+    <p>逆問題は、ここに観測データとのずれ <span class="eq">Σ<sub>i</sub> (x<sub>θ</sub>(t<sub>i</sub>) − g<sub>i</sub>)²</span> を足し、係数 <span class="eq">h, ω², λ</span> も学習パラメータにするだけです。順問題と逆問題が、<b>同じひとつの損失</b>で扱える——これがPINNのいちばん気持ちのいいところです。</p>
+    <p>このページのネットは 1→32→32→1 の小さなもので、ライブラリを使わずに書いています。<span class="eq">x, ẋ, ẍ</span> を層ごとに一緒に前へ流し、その三つ組ごと誤差逆伝播で微分しています。手書きの微分は、有限差分と突き合わせて相対誤差 2×10⁻⁹ で一致することを確かめました。</p>
+
+    <h2>なぜ、素のネットでは崩れるのか</h2>
+    <p>上のタブを「なし」に切り替えると、序盤だけ合って、後半は<b>ゼロに潰れた平らな線</b>になりがちです。<span class="eq">x ≡ 0</span> も方程式をきちんと満たすので、残差だけ見れば「正解」の一つなんです。しかもニューラルネットは低い周波数から先に覚える癖（スペクトルバイアス）があり、何周も振動する解はなかなか表せません。序盤でずれると、後半はその楽な解に流れていきます。</p>
+    <p>そこで、入力の時刻 <span class="eq">t</span> を最初の層で <span class="eq">sin(ω<sub>k</sub> t + φ<sub>k</sub>)</span> の束に展開します（<b>フーリエ特徴</b>）。周波数のものさしを最初から渡しておくわけです。これだけで、同じ大きさのネット・同じ学習回数でも、ずれは 10⁻³ 程度まで下がります。最近は、早い時刻の残差が小さくなるまで後ろの時刻の重みを下げる「因果的な学習」など、この“崩れ”を防ぐ工夫が研究の中心のひとつになっています。</p>
+
+    <h2>研究：AdS時空の弦と「動く境界」</h2>
+    <p>PINNの本領は、ふつうの数値解法が苦手な問題で出ます。取り組んだのは、反ド・ジッター（AdS）時空 <span class="eq">ds² = (−dt² + dx² + dz²)/z²</span> の中にぶら下がる弦の形です。ホログラフィー（AdS/CFT対応）では、境界 <span class="eq">z = 0</span> に両端を留めた弦のエネルギーが、クォーク間のポテンシャルに対応します。極座標 <span class="eq">(x, z) = (R cos θ, R sin θ)</span> で書くと、弦の形 <span class="eq">R(θ)</span> は次の方程式に従います。</p>
+    <div class="formula">
+      R″ − (2 / tan θ) ( R′ + R′³ / R² ) + R = 0
+      <small>弦の運動方程式。R(θ) をネットで表し、この残差と境界条件を損失にする</small>
+    </div>
+    <figure>
+      <img src="img/ads-string.png" alt="PINNで求めたAdS弦の形（左）、壁と垂直に交わる弦と学習された境界角θ0=0.464（中）、学習曲線（右）" loading="lazy">
+      <figcaption>左：境界に両端を留めた弦。中：時空に「壁」<span class="eq">z = z₀</span> がある場合。弦は壁に垂直に交わり、その位置も同時に学習された。右：学習曲線（PyTorch、約30秒）。</figcaption>
+    </figure>
+    <p>おもしろいのは2つ目です。時空に「壁」<span class="eq">z = z₀</span> があるモデル（クォーク閉じ込め相に対応）では、弦は壁に垂直に交わって終わります。ところが<b>弦が壁に届く角度 θ₀ は、解いてみるまで分かりません</b>。計算領域の端そのものが未知なので、ふつうの撃ち込み法（shooting）では、θ₀ を当て推量しては解き直すことになります。</p>
+    <p>PINNでは、θ₀ も<b>学習パラメータのひとつにしてしまいます</b>。<span class="eq">θ = θ₀ s</span>（<span class="eq">s ∈ (0, 1]</span>）と変数を変えると、領域が θ₀ と一緒に伸び縮みし、損失の勾配が θ₀ にも流れます。「壁に届く」「壁に垂直」という二つの条件を損失に足すと、弦の形と領域の端が同時に決まりました。</p>
+    <table class="cmp">
+      <tr><th>例題</th><th>PINNの結果</th><th>厳密な値</th></tr>
+      <tr><td>境界に留めた弦（幅 L = 2）の頂点の高さ</td><td>約 1.67</td><td class="tot">1.669</td></tr>
+      <tr><td>壁 z₀ = 0.5 に届く角度 θ₀</td><td>0.464</td><td class="tot">arctan(1/2) = 0.4636</td></tr>
+    </table>
+    <p>壁がある場合の厳密解は、まっすぐ下りる弦 <span class="eq">R(θ) = sec θ</span> です。ネットはこれを再現しながら、領域の端 θ₀ を小数第3位まで言い当てました。この問題は、AdS/CFTの時空計量そのものを深層学習で求める橋本らの研究（Phys. Rev. D 98, 046019）にもつながっています。</p>
+
+    <h2>つまずき：GPUが、黙って間違える</h2>
+    <p>最初は Apple の GPU（PyTorch の MPS バックエンド）で学習させたところ、損失が 2 前後から下がらなくなりました。同じコードを CPU で回すと、厳密解とのずれは 3×10⁻³ まで下がります。切り分けると、<b>torch 2.12.0 の MPS は、バッチが16以上のとき「入力についての勾配」を誤った値で返していました</b>。エラーも警告も出ません。ふつうの学習で使う「パラメータについての勾配」は正しいので、PINN のように <span class="eq">∂x<sub>θ</sub>/∂t</span> を損失に使う手法だけが、静かに壊れます。</p>
+    <p>それ以来、入力についての微分や高階微分を初めて使うときは、<b>有限差分で一度だけ検算する</b>ことにしています。このページの手書きの微分も、そうして確かめてから載せました。</p>
+
+    <div class="note">
+      <p>このページの数値は、ブラウザ内の学習（1→32→32→1、コロケーション点64、Adam）によるものです。乱数や端末によって結果は少し変わります。逆問題の <span class="eq">λ</span> は、振動が減衰すると <span class="eq">x³</span> の項が小さくなって効きが弱まるので、3つの係数のうちいちばん決まりにくく、データによって ±0.3 ほどぶれます。</p>
+      <p>参考：橋本幸士 編『学習物理学入門』（朝倉書店, 2024）A4章／棚橋典大「物理的ニューラルネットによる極小曲面の生成」（セミナー, 2025）／M. Raissi, P. Perdikaris, G. E. Karniadakis, <i>J. Comput. Phys.</i> 378 (2019)／M. Tancik et al., “Fourier Features Let Networks Learn High Frequency Functions…” (NeurIPS 2020)／S. Wang, H. Wang, P. Perdikaris, “On the eigenvector bias of Fourier feature networks” (<i>CMAME</i>, 2021)／S. Wang, S. Sankaran, P. Perdikaris, “Respecting causality for training physics-informed neural networks” (<i>CMAME</i>, 2024)／K. Hashimoto et al., “Deep learning and the AdS/CFT correspondence”, <i>Phys. Rev. D</i> 98, 046019 (2018)</p>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <span class="mark">ずっきーLab</span>
+  <a href="../../">ずっきーLab へ戻る</a> ・ <a href="https://github.com/ytszkyuta-max" target="_blank" rel="noopener">GitHub</a>
+</footer>
+
+<script>
+(function(){
+"use strict";
+// ---------------------------------------------------------------- tiny PINN engine
+// MLP 1→H→H→1. Each layer carries (value, d/dt, d²/dt²) forward; backprop runs through all three.
+function makeRng(seed){var s=seed>>>0;return function(){s=(s+0x6D2B79F5)>>>0;var t=s;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function gauss(r){var u=0;while(u===0)u=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*r())}
+
+// act: activation per hidden layer ('tanh' | 'sin'); w0: first-layer scale (sin + w0 = Fourier features)
+function Net(sizes,seed,act,w0){
+  var r=makeRng(seed);this.sizes=sizes;this.act=act;this.W=[];this.b=[];
+  for(var l=0;l<sizes.length-1;l++){
+    var n=sizes[l],m=sizes[l+1],W=new Float64Array(m*n),b=new Float64Array(m),sd=Math.sqrt(2/(n+m));
+    for(var i=0;i<m*n;i++)W[i]=gauss(r)*sd*(l===0&&w0?w0:1);
+    if(l===0&&w0)for(i=0;i<m;i++)b[i]=(r()*2-1)*Math.PI;
+    this.W.push(W);this.b.push(b);
+  }
+  this.params=[];for(l=0;l<this.W.length;l++)this.params.push(this.W[l],this.b[l]);
+}
+Net.prototype.cache=function(){
+  var c=[];for(var l=0;l<this.W.length;l++){var n=this.sizes[l],m=this.sizes[l+1],F=Float64Array;
+    c.push({a:new F(n),a1:new F(n),a2:new F(n),z:new F(m),z1:new F(m),z2:new F(m),d1:new F(m),d2:new F(m),d3:new F(m),g:new F(m),g1:new F(m),g2:new F(m)})}
+  return {c:c,y:0,y1:0,y2:0};
+};
+// input u with du/dt = up (and d²u/dt² = 0)
+Net.prototype.fwd=function(u,up,f){
+  var L=this.W.length,c=f.c;c[0].a[0]=u;c[0].a1[0]=up;c[0].a2[0]=0;
+  for(var l=0;l<L;l++){
+    var n=this.sizes[l],m=this.sizes[l+1],W=this.W[l],b=this.b[l],C=c[l],a=C.a,a1=C.a1,a2=C.a2,z=C.z,z1=C.z1,z2=C.z2,i,j;
+    for(i=0;i<m;i++){var s=b[i],s1=0,s2=0,o=i*n;for(j=0;j<n;j++){var w=W[o+j];s+=w*a[j];s1+=w*a1[j];s2+=w*a2[j]}z[i]=s;z1[i]=s1;z2[i]=s2}
+    if(l<L-1){
+      var N=c[l+1],A=N.a,A1=N.a1,A2=N.a2,sin=this.act[l]==='sin';
+      for(i=0;i<m;i++){var v,p,q,r3;
+        if(sin){v=Math.sin(z[i]);p=Math.cos(z[i]);q=-v;r3=-p}else{v=Math.tanh(z[i]);p=1-v*v;q=-2*v*p;r3=-2*p*(p-2*v*v)}
+        C.d1[i]=p;C.d2[i]=q;C.d3[i]=r3;A[i]=v;A1[i]=p*z1[i];A2[i]=p*z2[i]+q*z1[i]*z1[i]}
+    }
+  }
+  var Z=c[L-1];f.y=Z.z[0];f.y1=Z.z1[0];f.y2=Z.z2[0];return f;
+};
+// accumulate dLoss/dparams into g, given dLoss/d(y, y', y'')
+Net.prototype.bwd=function(f,gy,gy1,gy2,g){
+  var L=this.W.length,c=f.c;c[L-1].g[0]=gy;c[L-1].g1[0]=gy1;c[L-1].g2[0]=gy2;
+  for(var l=L-1;l>=0;l--){
+    var n=this.sizes[l],m=this.sizes[l+1],W=this.W[l],C=c[l],gW=g[2*l],gb=g[2*l+1],gz=C.g,gz1=C.g1,gz2=C.g2,i,j;
+    if(l<L-1){ // activation outputs -> pre-activations
+      for(i=0;i<m;i++){var p=C.d1[i],q=C.d2[i],z1=C.z1[i],gA=gz[i],gA1=gz1[i],gA2=gz2[i];
+        gz[i]=gA*p+gA1*q*z1+gA2*(q*C.z2[i]+C.d3[i]*z1*z1);
+        gz1[i]=gA1*p+2*gA2*q*z1;
+        gz2[i]=gA2*p}
+    }
+    var a=C.a,a1=C.a1,a2=C.a2;
+    if(l>0){var P=c[l-1],ga=P.g,ga1=P.g1,ga2=P.g2;ga.fill(0);ga1.fill(0);ga2.fill(0);
+      for(i=0;i<m;i++){var o=i*n,e=gz[i],e1=gz1[i],e2=gz2[i];gb[i]+=e;
+        for(j=0;j<n;j++){gW[o+j]+=e*a[j]+e1*a1[j]+e2*a2[j];var w=W[o+j];ga[j]+=w*e;ga1[j]+=w*e1;ga2[j]+=w*e2}}
+    }else{
+      for(i=0;i<m;i++){o=i*n;e=gz[i];e1=gz1[i];e2=gz2[i];gb[i]+=e;for(j=0;j<n;j++)gW[o+j]+=e*a[j]+e1*a1[j]+e2*a2[j]}
+    }
+  }
+};
+function Adam(arrs,lr){this.lr=lr;this.t=0;this.arrs=arrs;
+  this.m=arrs.map(function(a){return new Float64Array(a.length)});this.v=arrs.map(function(a){return new Float64Array(a.length)})}
+Adam.prototype.step=function(grads){this.t++;var b1=.9,b2=.999,c1=1-Math.pow(b1,this.t),c2=1-Math.pow(b2,this.t);
+  for(var k=0;k<this.arrs.length;k++){var p=this.arrs[k],g=grads[k],m=this.m[k],v=this.v[k];
+    for(var i=0;i<p.length;i++){m[i]=b1*m[i]+(1-b1)*g[i];v[i]=b2*v[i]+(1-b2)*g[i]*g[i];p[i]-=this.lr*(m[i]/c1)/(Math.sqrt(v[i]/c2)+1e-8)}}};
+function zeros(arrs){return arrs.map(function(a){return new Float64Array(a.length)})}
+
+// ---------------------------------------------------------------- drawing helpers
+var css=getComputedStyle(document.documentElement);
+function col(n){return css.getPropertyValue(n).trim()}
+var C={ink:col('--ink'),muted:col('--muted'),faint:col('--faint'),line:col('--line'),indigo:col('--indigo'),amber:col('--amber'),rust:col('--rust'),paper:col('--paper')};
+function setupCanvas(cv){
+  var dpr=window.devicePixelRatio||1,w=cv.width,h=cv.height;
+  if(!cv._w){cv._w=w;cv._h=h;cv.width=w*dpr;cv.height=h*dpr}
+  var ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);return ctx;
+}
+function axes(ctx,W,H,T,ymin,ymax){
+  var L=34,R=8,Tp=10,B=26,pw=W-L-R,ph=H-Tp-B;
+  ctx.clearRect(0,0,W,H);ctx.font='11px -apple-system,sans-serif';ctx.fillStyle=C.faint;ctx.strokeStyle=C.line;ctx.lineWidth=1;
+  var X=function(t){return L+pw*t/T},Y=function(y){return Tp+ph*(ymax-y)/(ymax-ymin)};
+  for(var yv=Math.ceil(ymin*2)/2;yv<=ymax+1e-9;yv+=0.5){ctx.beginPath();ctx.moveTo(L,Y(yv));ctx.lineTo(W-R,Y(yv));ctx.stroke();ctx.textAlign='right';ctx.fillText(yv.toFixed(1),L-6,Y(yv)+4)}
+  ctx.textAlign='center';for(var tv=0;tv<=T;tv+=2)ctx.fillText(tv===T?'t = '+tv:tv,tv===T?X(tv)-12:X(tv),H-8);
+  return {X:X,Y:Y};
+}
+function line(ctx,xs,ys,color,width,dash){ctx.beginPath();for(var i=0;i<xs.length;i++){if(i)ctx.lineTo(xs[i],ys[i]);else ctx.moveTo(xs[i],ys[i])}
+  ctx.strokeStyle=color;ctx.lineWidth=width;ctx.setLineDash(dash||[]);ctx.stroke();ctx.setLineDash([])}
+function sparkline(cv,hist){
+  var ctx=setupCanvas(cv),W=cv._w,H=cv._h;ctx.clearRect(0,0,W,H);if(hist.length<2)return;
+  var lo=Infinity,hi=-Infinity;hist.forEach(function(v){var l=Math.log10(v);if(l<lo)lo=l;if(l>hi)hi=l});if(hi-lo<1e-6)hi=lo+1;
+  var xs=[],ys=[];hist.forEach(function(v,i){xs.push(W*i/(hist.length-1));ys.push(3+(H-6)*(hi-Math.log10(v))/(hi-lo))});
+  line(ctx,xs,ys,C.indigo,1.2);
+}
+function fmt(v){if(!isFinite(v))return '—';if(v===0)return '0';var e=Math.floor(Math.log10(Math.abs(v)));if(e>=-2&&e<3)return v.toFixed(Math.max(0,3-e-1));
+  var m=v/Math.pow(10,e);return m.toFixed(1)+'×10'+String(e).replace('-','⁻').replace(/\d/g,function(d){return '⁰¹²³⁴⁵⁶⁷⁸⁹'[d]})}
+
+// ---------------------------------------------------------------- 1. forward problem
+var FW={T:8,N:64,H:32,steps:12000,lr:5e-3,mu:10};
+var fw={};
+function exactFn(h,w){var wd=Math.sqrt(w*w-h*h/4);return function(t){var e=Math.exp(-h*t/2);return e*(Math.cos(wd*t)+h/(2*wd)*Math.sin(wd*t))}}
+function fwdInit(){
+  var h=+document.getElementById('h-in').value,w=+document.getElementById('w-in').value,ff=fw.mode!=='plain';
+  fw.h=h;fw.w=w;fw.exact=exactFn(h,w);
+  fw.net=new Net([1,FW.H,FW.H,1],1,ff?['sin','tanh']:['tanh','tanh'],ff?w*FW.T/2:0);
+  fw.g=zeros(fw.net.params);fw.opt=new Adam(fw.net.params,FW.lr);
+  fw.F=[];for(var k=0;k<FW.N;k++)fw.F.push(fw.net.cache());fw.F0=fw.net.cache();fw.E=fw.net.cache();
+  fw.rng=makeRng(2);fw.step=0;fw.loss=NaN;fw.hist=[];fw.rmse=NaN;
+  document.getElementById('h-v').textContent=h.toFixed(2);document.getElementById('w-v').textContent=w.toFixed(1);
+  fwdDraw();
+}
+function fwdStep(){
+  var T=FW.T,N=FW.N,net=fw.net,g=fw.g,h=fw.h,w=fw.w,w2=w*w,sc=1/w2,up=2/T,L=0,k;
+  for(k=0;k<g.length;k++)g[k].fill(0);
+  for(k=0;k<N;k++){
+    var t=T*(k+fw.rng())/N,f=net.fwd(2*t/T-1,up,fw.F[k]),res=(f.y2+h*f.y1+w2*f.y)*sc,gr=2*res*sc/N;
+    L+=res*res/N;net.bwd(f,gr*w2,gr*h,gr,g);
+  }
+  var f0=net.fwd(-1,up,fw.F0),mu=FW.mu;
+  L+=mu*((f0.y-1)*(f0.y-1)+f0.y1*f0.y1*sc);net.bwd(f0,2*mu*(f0.y-1),2*mu*f0.y1*sc,0,g);
+  fw.opt.lr=FW.lr*0.5*(1+Math.cos(Math.PI*fw.step/FW.steps));fw.opt.step(g);
+  fw.step++;fw.loss=L;
+}
+function fwdEval(t){return fw.net.fwd(2*t/FW.T-1,2/FW.T,fw.E).y}
+function fwdDraw(){
+  var cv=document.getElementById('fwd-plot'),ctx=setupCanvas(cv),W=cv._w,H=cv._h,T=FW.T,ax=axes(ctx,W,H,T,-1,1.2);
+  var xs=[],ye=[],yp=[],se=0,n=240;
+  for(var i=0;i<=n;i++){var t=T*i/n,e=fw.exact(t),p=fwdEval(t);xs.push(ax.X(t));ye.push(ax.Y(e));yp.push(ax.Y(Math.max(-1.6,Math.min(1.8,p))));se+=(p-e)*(p-e)}
+  fw.rmse=Math.sqrt(se/(n+1));
+  ctx.save();ctx.beginPath();ctx.rect(34,0,W-42,H-26);ctx.clip();
+  line(ctx,xs,ye,C.faint,2.2);line(ctx,xs,yp,C.indigo,2,[6,4]);ctx.restore();
+  document.getElementById('fwd-ep').textContent=fw.step.toLocaleString();
+  document.getElementById('fwd-loss').textContent=fmt(fw.loss);
+  document.getElementById('fwd-rmse').textContent=fw.step?fmt(fw.rmse):'—';
+  sparkline(document.getElementById('fwd-hist'),fw.hist);
+  var P=document.getElementById('fwd-punch');
+  if(fw.step<FW.steps)P.innerHTML='ネットが見ているのは<b>方程式の残差だけ</b>。それでも、曲線は厳密解へ寄っていきます。';
+  else if(fw.rmse<0.02)P.innerHTML='正解の曲線を一度も見せずに、ずれ '+fmt(fw.rmse)+'。<b>方程式そのものが、教師でした。</b>';
+  else P.innerHTML='ずれ '+fmt(fw.rmse)+'。後半が平らに潰れたら、それは <b>x ≡ 0 という“楽な解”</b>に流れた跡です（下で解説）。';
+}
+
+// ---------------------------------------------------------------- 2. inverse problem
+var IV={T:10,N:64,M:40,H:32,steps:10000,lr:5e-3,lamD:10,sig:0.01,truth:[0.3,4,1],range:[1,6,2]};
+var iv={};
+function rk4(T,dt){var ts=[],xs=[],x=1,v=0,t=0,h=IV.truth[0],w2=IV.truth[1],lam=IV.truth[2];
+  function acc(x,v){return -h*v-w2*x+lam*x*x*x}
+  while(t<=T+1e-9){ts.push(t);xs.push(x);
+    var k1x=v,k1v=acc(x,v),k2x=v+dt/2*k1v,k2v=acc(x+dt/2*k1x,v+dt/2*k1v),k3x=v+dt/2*k2v,k3v=acc(x+dt/2*k2x,v+dt/2*k2v),k4x=v+dt*k3v,k4v=acc(x+dt*k3x,v+dt*k3v);
+    x+=dt/6*(k1x+2*k2x+2*k3x+k4x);v+=dt/6*(k1v+2*k2v+2*k3v+k4v);t+=dt}
+  return {ts:ts,xs:xs}}
+var TRUTH=rk4(IV.T,1e-3);
+function invInit(dataSeed){
+  var r=makeRng(dataSeed);iv.obs=[];
+  for(var i=0;i<IV.M;i++){var j=Math.round(r()*IV.T/1e-3);iv.obs.push([TRUTH.ts[j],TRUTH.xs[j]+IV.sig*gauss(r)])}
+  iv.net=new Net([1,IV.H,IV.H,1],1,['sin','tanh'],Math.sqrt(IV.truth[1])*IV.T/2);
+  iv.c=new Float64Array(3);// h, ω², λ — start from zero
+  iv.opt=new Adam(iv.net.params.concat([iv.c]),IV.lr);iv.g=zeros(iv.net.params.concat([iv.c]));
+  iv.F=[];for(var k=0;k<Math.max(IV.N,IV.M);k++)iv.F.push(iv.net.cache());iv.E=iv.net.cache();
+  iv.rng=makeRng(dataSeed+101);iv.step=0;iv.running=false;
+  document.getElementById('inv-punch').innerHTML='観測点は40個だけ。<b>方程式の形</b>を知っていれば、そこから法則の係数まで決められます。';
+  invDraw();
+}
+function invStep(){
+  var T=IV.T,net=iv.net,g=iv.g,gc=g[g.length-1],c=iv.c,up=2/T,k;
+  for(k=0;k<g.length;k++)g[k].fill(0);
+  for(k=0;k<IV.N;k++){
+    var t=T*(k+iv.rng())/IV.N,f=net.fwd(2*t/T-1,up,iv.F[k]),x=f.y,res=(f.y2+c[0]*f.y1+c[1]*x-c[2]*x*x*x)/4,gr=2*res/IV.N/4;
+    gc[0]+=gr*f.y1;gc[1]+=gr*x;gc[2]-=gr*x*x*x;net.bwd(f,gr*(c[1]-3*c[2]*x*x),gr*c[0],gr,g);
+  }
+  for(k=0;k<IV.M;k++){var o=iv.obs[k],fo=net.fwd(2*o[0]/T-1,up,iv.F[k]);net.bwd(fo,IV.lamD*2*(fo.y-o[1])/IV.M,0,0,g)}
+  iv.opt.lr=IV.lr*0.5*(1+Math.cos(Math.PI*iv.step/IV.steps));iv.opt.step(g);iv.step++;
+}
+function invDraw(){
+  var cv=document.getElementById('inv-plot'),ctx=setupCanvas(cv),W=cv._w,H=cv._h,T=IV.T,ax=axes(ctx,W,H,T,-1,1.2);
+  ctx.fillStyle=C.amber;iv.obs.forEach(function(o){ctx.beginPath();ctx.arc(ax.X(o[0]),ax.Y(o[1]),3,0,2*Math.PI);ctx.fill()});
+  if(iv.step>0){var xs=[],ys=[];for(var i=0;i<=240;i++){var t=T*i/240,p=iv.net.fwd(2*t/T-1,2/T,iv.E).y;xs.push(ax.X(t));ys.push(ax.Y(Math.max(-1.6,Math.min(1.8,p))))}
+    ctx.save();ctx.beginPath();ctx.rect(34,0,W-42,H-26);ctx.clip();line(ctx,xs,ys,C.indigo,2,[6,4]);ctx.restore()}
+  document.getElementById('inv-ep').textContent=iv.step.toLocaleString();
+  for(var k=0;k<3;k++){
+    var v=iv.c[k],R=IV.range[k];
+    document.getElementById('c'+k).style.width=Math.max(0,Math.min(1,v/R))*100+'%';
+    document.getElementById('t'+k).style.left=(IV.truth[k]/R*100)+'%';
+    document.getElementById('v'+k).innerHTML=(iv.step?v.toFixed(3):'—')+'<small>/ '+IV.truth[k]+'</small>';
+  }
+  if(iv.step>=IV.steps)document.getElementById('inv-punch').innerHTML='40個の点から、<b>h = '+iv.c[0].toFixed(2)+'、ω² = '+iv.c[1].toFixed(2)+'、λ = '+iv.c[2].toFixed(2)+'</b>。λ（x³ の項）は振れ幅が小さくなると効きが弱まるので、いちばん決まりにくい係数です。';
+}
+
+// ---------------------------------------------------------------- loop (shared, time-sliced)
+var fwdRunning=false,started=false;
+function setBtn(id,on,labelOn,labelOff){document.getElementById(id).textContent=on?labelOn:labelOff}
+function frame(){
+  var t0=performance.now(),budget=14,did=false;
+  while(performance.now()-t0<budget){
+    var any=false;
+    if(fwdRunning&&fw.step<FW.steps){fwdStep();any=true}
+    if(iv.running&&iv.step<IV.steps){invStep();any=true}
+    if(!any)break;did=true;
+  }
+  if(fwdRunning){if(fw.hist.length<400||fw.step%30===0)fw.hist.push(fw.loss);if(fw.step>=FW.steps){fwdRunning=false;setBtn('fwd-go',false,'止める','学習する')}fwdDraw()}
+  if(iv.running){if(iv.step>=IV.steps){iv.running=false;setBtn('inv-go',false,'止める','学習する')}invDraw()}
+  if(did||fwdRunning||iv.running)requestAnimationFrame(frame);else loopOn=false;
+}
+var loopOn=false;function kick(){if(!loopOn){loopOn=true;requestAnimationFrame(frame)}}
+// keep the loss history short: thin it out as it grows
+setInterval(function(){if(fw.hist.length>400){fw.hist=fw.hist.filter(function(_,i){return i%2===0})}},500);
+
+function fwdStart(){if(fw.step>=FW.steps)fwdInit();fwdRunning=true;setBtn('fwd-go',true,'止める','学習する');kick()}
+function fwdStop(){fwdRunning=false;setBtn('fwd-go',false,'止める','学習する')}
+document.getElementById('fwd-go').onclick=function(){fwdRunning?fwdStop():fwdStart()};
+document.getElementById('fwd-reset').onclick=function(){fwdInit();fwdStart()};
+['h-in','w-in'].forEach(function(id){var el=document.getElementById(id);
+  el.oninput=function(){document.getElementById('h-v').textContent=(+document.getElementById('h-in').value).toFixed(2);document.getElementById('w-v').textContent=(+document.getElementById('w-in').value).toFixed(1)};
+  el.onchange=function(){fwdInit();fwdStart()}});
+fw.mode='ff';
+Array.prototype.forEach.call(document.querySelectorAll('#fwd-mode button'),function(b){b.onclick=function(){
+  Array.prototype.forEach.call(document.querySelectorAll('#fwd-mode button'),function(x){x.classList.toggle('on',x===b)});
+  fw.mode=b.dataset.m;fwdInit();fwdStart()}});
+
+var dataSeed=7;
+document.getElementById('inv-go').onclick=function(){
+  if(iv.running){iv.running=false;setBtn('inv-go',false,'止める','学習する');return}
+  if(iv.step>=IV.steps)invInit(dataSeed);iv.running=true;setBtn('inv-go',true,'止める','学習する');kick()};
+document.getElementById('inv-new').onclick=function(){dataSeed+=1;invInit(dataSeed);iv.running=true;setBtn('inv-go',true,'止める','学習する');kick()};
+
+fwdInit();invInit(dataSeed);setBtn('fwd-go',false,'止める','学習する');
+// start the forward demo once it scrolls into view
+var io='IntersectionObserver' in window?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting&&!started){started=true;fwdStart();io.disconnect()}})},{threshold:0.3}):null;
+if(io)io.observe(document.getElementById('fwd'));else{started=true;fwdStart()}
+})();
+</script>
+</body>
+</html>
